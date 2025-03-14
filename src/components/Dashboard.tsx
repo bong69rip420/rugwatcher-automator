@@ -15,6 +15,30 @@ export const Dashboard = () => {
   const [loading, setLoading] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
 
+  useEffect(() => {
+    const fetchBalance = async () => {
+      try {
+        setLoading(true);
+        await solanaTradeExecutor.initialize();
+        const balance = await solanaTradeExecutor.getWalletBalance();
+        setBalance(balance);
+      } catch (error) {
+        console.error('Error fetching wallet balance:', error);
+        toast({
+          variant: "destructive",
+          title: "Error fetching wallet balance",
+          description: error instanceof Error ? error.message : "Please check your wallet configuration"
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchBalance();
+    const interval = setInterval(fetchBalance, 30000);
+    return () => clearInterval(interval);
+  }, [toast]);
+
   const { data: tokens = [], refetch: refetchTokens } = useQuery({
     queryKey: ['tokens'],
     queryFn: () => supabaseService.getMonitoredTokens(),
@@ -24,26 +48,6 @@ export const Dashboard = () => {
     queryKey: ['trades'],
     queryFn: () => supabaseService.getTrades(),
   });
-
-  useEffect(() => {
-    const fetchBalance = async () => {
-      try {
-        const balance = await solanaTradeExecutor.getWalletBalance();
-        setBalance(balance);
-      } catch (error) {
-        console.error('Error fetching wallet balance:', error);
-        toast({
-          variant: "destructive",
-          title: "Error fetching wallet balance",
-          description: "Please check your wallet connection"
-        });
-      }
-    };
-
-    fetchBalance();
-    const interval = setInterval(fetchBalance, 30000);
-    return () => clearInterval(interval);
-  }, [toast]);
 
   const handleToggleMonitoring = () => {
     const tokenMonitor = TokenMonitor.getInstance();
@@ -66,7 +70,13 @@ export const Dashboard = () => {
               <div>
                 <p className="text-sm text-gray-400">Wallet Balance</p>
                 <p className="font-medium">
-                  {balance !== null ? `${balance.toFixed(4)} SOL` : 'Loading...'}
+                  {loading ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : balance !== null ? (
+                    `${balance.toFixed(4)} SOL`
+                  ) : (
+                    'Wallet not configured'
+                  )}
                 </p>
               </div>
             </Card>
