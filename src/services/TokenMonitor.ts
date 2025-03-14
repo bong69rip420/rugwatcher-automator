@@ -1,3 +1,4 @@
+import { blockchainService } from './BlockchainService';
 
 interface Token {
   address: string;
@@ -32,8 +33,11 @@ export class TokenMonitor {
     this.onNewToken = callback;
   }
 
-  start() {
+  async start() {
     if (this.intervalId) return;
+
+    const provider = await blockchainService.getProvider();
+    console.log('Monitoring tokens with provider:', provider);
 
     this.intervalId = setInterval(() => {
       this.checkNewTokens();
@@ -52,6 +56,9 @@ export class TokenMonitor {
 
   private async checkNewTokens() {
     try {
+      const provider = await blockchainService.getProvider();
+      console.log('Checking new tokens using provider:', provider);
+
       // Mock implementation - replace with actual API call
       const mockNewToken: Token = {
         address: "0x" + Math.random().toString(16).slice(2, 42),
