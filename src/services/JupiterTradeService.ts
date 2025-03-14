@@ -75,9 +75,9 @@ export class JupiterTradeService {
         throw new Error('Swap failed: ' + swapResult.error);
       }
 
-      console.log('Trade executed successfully:', swapResult.signature);
+      console.log('Trade executed successfully:', swapResult.txid);
       
-      return swapResult.signature;
+      return swapResult.txid;
     } catch (error) {
       console.error('Error executing trade:', error);
       throw error;
