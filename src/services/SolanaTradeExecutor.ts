@@ -7,6 +7,7 @@ import { configurationService } from './ConfigurationService';
 export class SolanaTradeExecutor {
   private static instance: SolanaTradeExecutor;
   private connection: Connection | null = null;
+  private isInitializing = false;
 
   private constructor() {}
 
@@ -18,10 +19,21 @@ export class SolanaTradeExecutor {
   }
 
   async initialize() {
-    const provider = await blockchainService.getProvider();
-    this.connection = new Connection(provider.rpcUrl);
-    
+    if (this.isInitializing) {
+      console.log('Trade executor initialization already in progress');
+      return;
+    }
+
     if (this.connection) {
+      console.log('Trade executor already initialized');
+      return;
+    }
+
+    try {
+      this.isInitializing = true;
+      const provider = await blockchainService.getProvider();
+      this.connection = new Connection(provider.rpcUrl);
+      
       await jupiterTradeService.initialize(this.connection);
       
       // Get wallet configuration from the database
@@ -31,9 +43,14 @@ export class SolanaTradeExecutor {
       } else {
         console.warn('No trading wallet configured');
       }
+      
+      console.log('Trade executor initialized successfully');
+    } catch (error) {
+      console.error('Error initializing trade executor:', error);
+      throw error;
+    } finally {
+      this.isInitializing = false;
     }
-    
-    console.log('Trade executor initialized with Solana connection');
   }
 
   async executePurchase(tokenAddress: string, amount: number): Promise<string> {

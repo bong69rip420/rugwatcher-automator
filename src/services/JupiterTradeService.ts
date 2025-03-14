@@ -1,4 +1,3 @@
-
 import { Connection, PublicKey, Keypair, VersionedTransaction } from '@solana/web3.js';
 import { Jupiter } from '@jup-ag/core';
 import JSBI from 'jsbi';
@@ -9,6 +8,7 @@ export class JupiterTradeService {
   private connection: Connection | null = null;
   private jupiter: Jupiter | null = null;
   private tradingWallet: Keypair | null = null;
+  private isInitializing = false;
 
   private constructor() {}
 
@@ -20,14 +20,32 @@ export class JupiterTradeService {
   }
 
   async initialize(connection: Connection) {
-    this.connection = connection;
-    
-    this.jupiter = await Jupiter.load({
-      connection,
-      cluster: 'mainnet-beta',
-    });
-    
-    console.log('Jupiter trade service initialized');
+    if (this.isInitializing) {
+      console.log('Jupiter initialization already in progress');
+      return;
+    }
+
+    if (this.jupiter) {
+      console.log('Jupiter already initialized');
+      return;
+    }
+
+    try {
+      this.isInitializing = true;
+      this.connection = connection;
+      
+      this.jupiter = await Jupiter.load({
+        connection,
+        cluster: 'mainnet-beta',
+      });
+      
+      console.log('Jupiter trade service initialized successfully');
+    } catch (error) {
+      console.error('Error initializing Jupiter:', error);
+      throw error;
+    } finally {
+      this.isInitializing = false;
+    }
   }
 
   setTradingWallet(privateKey: string) {
@@ -50,7 +68,6 @@ export class JupiterTradeService {
       const config = await configurationService.getTradeConfig();
       console.log('Using trade config:', config);
 
-      // USDC input token
       const inputMint = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'); // USDC
       const outputMint = new PublicKey(tokenAddress);
 
@@ -73,17 +90,14 @@ export class JupiterTradeService {
         priceImpactPct: bestRoute.priceImpactPct,
       });
 
-      // Get the transactions for the swap
       const { swapTransaction } = await this.jupiter.exchange({
         routeInfo: bestRoute,
         userPublicKey: this.tradingWallet.publicKey,
       });
 
-      // Sign and send the transaction
       if (swapTransaction instanceof VersionedTransaction) {
         swapTransaction.sign([this.tradingWallet]);
         const signature = await this.connection.sendRawTransaction(swapTransaction.serialize());
-        
         console.log('Trade executed successfully:', signature);
         return signature;
       } else {
@@ -97,4 +111,3 @@ export class JupiterTradeService {
 }
 
 export const jupiterTradeService = JupiterTradeService.getInstance();
-
