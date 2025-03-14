@@ -1,4 +1,5 @@
-import { Connection, PublicKey } from '@solana/web3.js';
+
+import { Connection, PublicKey, Keypair } from '@solana/web3.js';
 import { Jupiter } from '@jup-ag/core';
 import JSBI from 'jsbi';
 import { configurationService } from './ConfigurationService';
@@ -7,6 +8,7 @@ export class JupiterTradeService {
   private static instance: JupiterTradeService;
   private connection: Connection | null = null;
   private jupiter: Jupiter | null = null;
+  private tradingWallet: Keypair | null = null;
 
   private constructor() {}
 
@@ -24,14 +26,35 @@ export class JupiterTradeService {
     this.jupiter = await Jupiter.load({
       connection,
       cluster: 'mainnet-beta',
+      userPublicKey: this.tradingWallet?.publicKey // Will be null until wallet is set
     });
     
     console.log('Jupiter trade service initialized');
   }
 
+  setTradingWallet(privateKeyString: string) {
+    try {
+      const privateKey = new Uint8Array(JSON.parse(privateKeyString));
+      this.tradingWallet = Keypair.fromSecretKey(privateKey);
+      console.log('Trading wallet set:', this.tradingWallet.publicKey.toString());
+      
+      // Reinitialize Jupiter with the wallet
+      if (this.connection) {
+        this.initialize(this.connection);
+      }
+    } catch (error) {
+      console.error('Error setting trading wallet:', error);
+      throw new Error('Invalid private key format');
+    }
+  }
+
   async executePurchase(tokenAddress: string, amount: number): Promise<string> {
     if (!this.connection || !this.jupiter) {
       throw new Error('Trade service not initialized');
+    }
+
+    if (!this.tradingWallet) {
+      throw new Error('Trading wallet not configured');
     }
 
     try {
@@ -48,7 +71,8 @@ export class JupiterTradeService {
         outputMint,
         amount: JSBI.BigInt(amount * 1_000_000), // Convert to USDC decimals
         slippageBps: 100,
-        forceFetch: true
+        forceFetch: true,
+        userPublicKey: this.tradingWallet.publicKey // Important: Add the wallet's public key
       });
 
       if (routes.routesInfos.length === 0) {
@@ -63,12 +87,20 @@ export class JupiterTradeService {
         priceImpactPct: bestRoute.priceImpactPct,
       });
 
-      // Execute the exchange
+      // Execute the exchange with the wallet
       const result = await this.jupiter.exchange({
-        routeInfo: bestRoute
+        routeInfo: bestRoute,
+        userPublicKey: this.tradingWallet.publicKey,
+        wallet: {
+          sendTransaction: async (transaction, connection) => {
+            transaction.sign(this.tradingWallet!);
+            const signature = await connection.sendRawTransaction(transaction.serialize());
+            await connection.confirmTransaction(signature, 'confirmed');
+            return signature;
+          }
+        }
       });
 
-      // Execute the transaction
       const swapResult = await result.execute();
       
       if ('error' in swapResult) {

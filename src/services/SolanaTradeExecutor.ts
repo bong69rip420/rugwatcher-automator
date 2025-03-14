@@ -2,6 +2,7 @@
 import { Connection } from '@solana/web3.js';
 import { blockchainService } from './BlockchainService';
 import { jupiterTradeService } from './JupiterTradeService';
+import { configurationService } from './ConfigurationService';
 
 export class SolanaTradeExecutor {
   private static instance: SolanaTradeExecutor;
@@ -22,6 +23,14 @@ export class SolanaTradeExecutor {
     
     if (this.connection) {
       await jupiterTradeService.initialize(this.connection);
+      
+      // Get wallet configuration from the database
+      const config = await configurationService.getTradeConfig();
+      if (config?.wallet_private_key) {
+        jupiterTradeService.setTradingWallet(config.wallet_private_key);
+      } else {
+        console.warn('No trading wallet configured');
+      }
     }
     
     console.log('Trade executor initialized with Solana connection');
@@ -35,3 +44,5 @@ export class SolanaTradeExecutor {
     return jupiterTradeService.executePurchase(tokenAddress, amount);
   }
 }
+
+export const solanaTradeExecutor = SolanaTradeExecutor.getInstance();
