@@ -1,5 +1,4 @@
-
-import { Connection, PublicKey, Keypair } from '@solana/web3.js';
+import { Connection, PublicKey } from '@solana/web3.js';
 import { Jupiter } from '@jup-ag/core';
 import JSBI from 'jsbi';
 import { configurationService } from './ConfigurationService';
@@ -8,7 +7,6 @@ export class JupiterTradeService {
   private static instance: JupiterTradeService;
   private connection: Connection | null = null;
   private jupiter: Jupiter | null = null;
-  private tradingWallet: Keypair | null = null;
 
   private constructor() {}
 
@@ -31,29 +29,9 @@ export class JupiterTradeService {
     console.log('Jupiter trade service initialized');
   }
 
-  setTradingWallet(privateKeyString: string) {
-    try {
-      const privateKey = new Uint8Array(JSON.parse(privateKeyString));
-      this.tradingWallet = Keypair.fromSecretKey(privateKey);
-      console.log('Trading wallet set:', this.tradingWallet.publicKey.toString());
-      
-      // Reinitialize Jupiter with the wallet
-      if (this.connection) {
-        this.initialize(this.connection);
-      }
-    } catch (error) {
-      console.error('Error setting trading wallet:', error);
-      throw new Error('Invalid private key format');
-    }
-  }
-
   async executePurchase(tokenAddress: string, amount: number): Promise<string> {
     if (!this.connection || !this.jupiter) {
       throw new Error('Trade service not initialized');
-    }
-
-    if (!this.tradingWallet) {
-      throw new Error('Trading wallet not configured');
     }
 
     try {
@@ -85,21 +63,21 @@ export class JupiterTradeService {
         priceImpactPct: bestRoute.priceImpactPct,
       });
 
-      // Execute the exchange
-      const transaction = await this.jupiter.createTransaction({
+      // Execute the exchange using the Jupiter.exchange() method.
+      const result = await this.jupiter.exchange({
         routeInfo: bestRoute
       });
 
-      // Sign and send transaction
-      transaction.transaction.sign(this.tradingWallet);
-      const signature = await this.connection.sendRawTransaction(
-        transaction.transaction.serialize()
-      );
+      // Execute the transaction
+      const swapResult = await result.execute();
       
-      await this.connection.confirmTransaction(signature, 'confirmed');
-      console.log('Trade executed successfully:', signature);
+      if ('error' in swapResult) {
+        throw new Error('Swap failed: ' + swapResult.error);
+      }
+
+      console.log('Trade executed successfully:', swapResult.txid);
       
-      return signature;
+      return swapResult.txid;
     } catch (error) {
       console.error('Error executing trade:', error);
       throw error;
@@ -108,3 +86,4 @@ export class JupiterTradeService {
 }
 
 export const jupiterTradeService = JupiterTradeService.getInstance();
+
