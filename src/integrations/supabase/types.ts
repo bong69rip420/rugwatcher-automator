@@ -9,7 +9,96 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      monitored_tokens: {
+        Row: {
+          address: string
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          symbol: string
+          updated_at: string | null
+        }
+        Insert: {
+          address: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          symbol: string
+          updated_at?: string | null
+        }
+        Update: {
+          address?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          symbol?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      trades: {
+        Row: {
+          amount: number
+          created_at: string | null
+          id: string
+          price: number | null
+          status: Database["public"]["Enums"]["trade_status"]
+          token_address: string
+          transaction_hash: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string | null
+          id?: string
+          price?: number | null
+          status?: Database["public"]["Enums"]["trade_status"]
+          token_address: string
+          transaction_hash?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          id?: string
+          price?: number | null
+          status?: Database["public"]["Enums"]["trade_status"]
+          token_address?: string
+          transaction_hash?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      trading_config: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          max_trade_amount: number
+          min_liquidity: number
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          max_trade_amount: number
+          min_liquidity: number
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          max_trade_amount?: number
+          min_liquidity?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -18,7 +107,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      trade_status: "pending" | "completed" | "failed"
     }
     CompositeTypes: {
       [_ in never]: never

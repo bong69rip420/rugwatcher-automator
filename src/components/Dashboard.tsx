@@ -6,51 +6,65 @@ import { useToast } from "@/components/ui/use-toast";
 import { TokenMonitor } from "@/services/TokenMonitor";
 import { TradingService } from "@/services/TradingService";
 import { AlertCircle, CheckCircle, RefreshCw } from "lucide-react";
-
-interface Token {
-  address: string;
-  name: string;
-  symbol: string;
-  timestamp: number;
-}
-
-interface Trade {
-  tokenAddress: string;
-  amount: number;
-  timestamp: number;
-  status: "pending" | "completed" | "failed";
-}
+import { supabaseService, type Token, type Trade } from "@/services/SupabaseService";
+import { useQuery } from "@tanstack/react-query";
 
 export const Dashboard = () => {
   const { toast } = useToast();
   const [isMonitoring, setIsMonitoring] = useState(false);
-  const [tokens, setTokens] = useState<Token[]>([]);
-  const [trades, setTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const { data: tokens = [], refetch: refetchTokens } = useQuery({
+    queryKey: ['tokens'],
+    queryFn: () => supabaseService.getMonitoredTokens(),
+  });
+
+  const { data: trades = [], refetch: refetchTrades } = useQuery({
+    queryKey: ['trades'],
+    queryFn: () => supabaseService.getTrades(),
+  });
 
   useEffect(() => {
     const tokenMonitor = TokenMonitor.getInstance();
-    const tradingService = TradingService.getInstance();
 
     tokenMonitor.setOnNewToken(async (token) => {
-      setTokens((prev) => [...prev, token]);
-      toast({
-        title: "New Token Detected",
-        description: `${token.name} (${token.symbol}) has been listed`,
+      // Add token to Supabase
+      const newToken = await supabaseService.addToken({
+        address: token.address,
+        name: token.name,
+        symbol: token.symbol,
       });
 
-      const analysis = await tokenMonitor.analyzeToken(token);
-      if (analysis.isSecure) {
-        setLoading(true);
-        const trade = await tradingService.executeTrade(token.address, 0.1);
-        setTrades((prev) => [...prev, trade]);
-        setLoading(false);
-
+      if (newToken) {
+        refetchTokens();
         toast({
-          title: trade.status === "completed" ? "Trade Executed" : "Trade Failed",
-          description: `${token.symbol}: ${trade.status}`,
-          variant: trade.status === "completed" ? "default" : "destructive",
+          title: "New Token Detected",
+          description: `${newToken.name} (${newToken.symbol}) has been listed`,
         });
+
+        const analysis = await tokenMonitor.analyzeToken(token);
+        if (analysis.isSecure) {
+          setLoading(true);
+          const tradingService = TradingService.getInstance();
+          const trade = await tradingService.executeTrade(token.address, 0.1);
+          
+          await supabaseService.addTrade({
+            token_address: trade.tokenAddress,
+            amount: trade.amount,
+            price: null,
+            status: trade.status,
+            transaction_hash: null,
+          });
+
+          refetchTrades();
+          setLoading(false);
+
+          toast({
+            title: trade.status === "completed" ? "Trade Executed" : "Trade Failed",
+            description: `${token.symbol}: ${trade.status}`,
+            variant: trade.status === "completed" ? "default" : "destructive",
+          });
+        }
       }
     });
 
@@ -90,7 +104,7 @@ export const Dashboard = () => {
             <div className="space-y-4">
               {tokens.map((token) => (
                 <div
-                  key={token.address}
+                  key={token.id}
                   className="flex items-center justify-between p-4 rounded-lg bg-gray-800/50 animate-fade-up"
                 >
                   <div>
@@ -98,7 +112,7 @@ export const Dashboard = () => {
                     <p className="text-sm text-gray-400">{token.symbol}</p>
                   </div>
                   <p className="text-sm text-gray-400">
-                    {new Date(token.timestamp).toLocaleTimeString()}
+                    {new Date(token.created_at).toLocaleTimeString()}
                   </p>
                 </div>
               ))}
@@ -113,7 +127,7 @@ export const Dashboard = () => {
             <div className="space-y-4">
               {trades.map((trade) => (
                 <div
-                  key={`${trade.tokenAddress}-${trade.timestamp}`}
+                  key={trade.id}
                   className="flex items-center justify-between p-4 rounded-lg bg-gray-800/50 animate-fade-up"
                 >
                   <div className="flex items-center gap-2">
@@ -126,13 +140,13 @@ export const Dashboard = () => {
                     )}
                     <div>
                       <p className="font-medium">
-                        {trade.tokenAddress.slice(0, 6)}...{trade.tokenAddress.slice(-4)}
+                        {trade.token_address.slice(0, 6)}...{trade.token_address.slice(-4)}
                       </p>
                       <p className="text-sm text-gray-400">${trade.amount}</p>
                     </div>
                   </div>
                   <p className="text-sm text-gray-400">
-                    {new Date(trade.timestamp).toLocaleTimeString()}
+                    {new Date(trade.created_at).toLocaleTimeString()}
                   </p>
                 </div>
               ))}
