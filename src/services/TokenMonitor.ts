@@ -1,6 +1,7 @@
 import { blockchainService } from './BlockchainService';
 import { Connection } from '@solana/web3.js';
 import { getTokenHolders, analyzeHolderDistribution, analyzeTokenContract, get24hVolume, storeTokenAnalysis } from '@/utils/tokenAnalysis';
+import { SolanaTradeExecutor } from './SolanaTradeExecutor';
 
 interface Token {
   address: string;
@@ -19,6 +20,7 @@ interface TokenAnalysis {
   hasPausableTrading: boolean;
   hasBlacklist: boolean;
   volume24h: number;
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
 }
 
 export class TokenMonitor {
@@ -50,6 +52,10 @@ export class TokenMonitor {
       
       this.connection = new Connection(provider.rpcUrl);
       console.log('Connected to Solana network:', provider.network);
+
+      // Initialize trade executor
+      const tradeExecutor = SolanaTradeExecutor.getInstance();
+      await tradeExecutor.initialize();
 
       // Subscribe to program accounts that create new tokens
       const tokenProgramId = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
@@ -142,8 +148,20 @@ export class TokenMonitor {
         hasUnlimitedMint: contractAnalysis.hasUnlimitedMint,
         hasPausableTrading: contractAnalysis.hasPausableTrading,
         hasBlacklist: contractAnalysis.hasBlacklist,
-        volume24h
+        volume24h,
+        riskLevel: contractAnalysis.riskLevel
       };
+
+      // If token is safe, execute a trade
+      if (isSafe) {
+        try {
+          const tradeExecutor = SolanaTradeExecutor.getInstance();
+          const txHash = await tradeExecutor.executePurchase(token.address, 0.1); // Start with small amount
+          console.log('Trade executed successfully:', txHash);
+        } catch (error) {
+          console.error('Failed to execute trade:', error);
+        }
+      }
 
       await storeTokenAnalysis(token.address, {
         totalHolders: uniqueHolders,
@@ -152,7 +170,7 @@ export class TokenMonitor {
         hasPausableTrading: contractAnalysis.hasPausableTrading,
         hasBlacklist: contractAnalysis.hasBlacklist,
         volume24h,
-        isSafe
+        riskLevel: contractAnalysis.riskLevel
       });
 
       return analysis;
