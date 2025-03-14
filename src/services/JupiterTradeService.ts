@@ -1,10 +1,12 @@
 
 import { Connection, PublicKey } from '@solana/web3.js';
+import { Jupiter } from '@jup-ag/core';
 import { configurationService } from './ConfigurationService';
 
 export class JupiterTradeService {
   private static instance: JupiterTradeService;
   private connection: Connection | null = null;
+  private jupiter: Jupiter | null = null;
 
   private constructor() {}
 
@@ -17,11 +19,19 @@ export class JupiterTradeService {
 
   async initialize(connection: Connection) {
     this.connection = connection;
+    
+    // Initialize Jupiter instance
+    this.jupiter = await Jupiter.load({
+      connection,
+      cluster: 'mainnet-beta',
+      defaultSlippageBps: 100, // 1% slippage
+    });
+    
     console.log('Jupiter trade service initialized');
   }
 
   async executePurchase(tokenAddress: string, amount: number): Promise<string> {
-    if (!this.connection) {
+    if (!this.connection || !this.jupiter) {
       throw new Error('Trade service not initialized');
     }
 
@@ -29,9 +39,41 @@ export class JupiterTradeService {
       const config = await configurationService.getTradeConfig();
       console.log('Using trade config:', config);
 
-      // Here we'll add Jupiter DEX integration
-      // For now returning mock data until we add Jupiter SDK
-      return `mock_jupiter_tx_${Date.now()}`;
+      // USDC is commonly used as input token
+      const inputMint = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'); // USDC
+      const outputMint = new PublicKey(tokenAddress);
+
+      // Get routes for the swap
+      const routes = await this.jupiter.computeRoutes({
+        inputMint,
+        outputMint,
+        amount: amount * 1_000_000, // Convert to USDC decimals
+        slippageBps: 100,
+        forceFetch: true
+      });
+
+      if (routes.routesInfos.length === 0) {
+        throw new Error('No routes found for trade');
+      }
+
+      // Select best route
+      const bestRoute = routes.routesInfos[0];
+      console.log('Selected route:', {
+        inAmount: bestRoute.inAmount,
+        outAmount: bestRoute.outAmount,
+        priceImpactPct: bestRoute.priceImpactPct,
+      });
+
+      // Execute the exchange
+      const { transactions } = await this.jupiter.exchange({
+        routeInfo: bestRoute
+      });
+
+      // Execute the transaction
+      const txid = await transactions.execute();
+      console.log('Trade executed successfully:', txid);
+      
+      return txid;
     } catch (error) {
       console.error('Error executing trade:', error);
       throw error;
