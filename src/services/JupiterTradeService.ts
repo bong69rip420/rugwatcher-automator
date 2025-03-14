@@ -1,5 +1,5 @@
 
-import { Connection, PublicKey, Transaction } from '@solana/web3.js';
+import { Connection, PublicKey, Keypair } from '@solana/web3.js';
 import { Jupiter } from '@jup-ag/core';
 import JSBI from 'jsbi';
 import { configurationService } from './ConfigurationService';
@@ -8,6 +8,7 @@ export class JupiterTradeService {
   private static instance: JupiterTradeService;
   private connection: Connection | null = null;
   private jupiter: Jupiter | null = null;
+  private tradingWallet: Keypair | null = null;
 
   private constructor() {}
 
@@ -29,9 +30,20 @@ export class JupiterTradeService {
     console.log('Jupiter trade service initialized');
   }
 
+  setTradingWallet(privateKey: string) {
+    try {
+      const decodedKey = new Uint8Array(Buffer.from(privateKey, 'base64'));
+      this.tradingWallet = Keypair.fromSecretKey(decodedKey);
+      console.log('Trading wallet set successfully');
+    } catch (error) {
+      console.error('Error setting trading wallet:', error);
+      throw new Error('Invalid wallet private key format');
+    }
+  }
+
   async executePurchase(tokenAddress: string, amount: number): Promise<string> {
-    if (!this.connection || !this.jupiter) {
-      throw new Error('Trade service not initialized');
+    if (!this.connection || !this.jupiter || !this.tradingWallet) {
+      throw new Error('Trade service not initialized or wallet not set');
     }
 
     try {
@@ -61,15 +73,15 @@ export class JupiterTradeService {
         priceImpactPct: bestRoute.priceImpactPct,
       });
 
-      // Get the serialized transactions for the swap
+      // Get the transactions for the swap
       const { swapTransaction } = await this.jupiter.exchange({
-        routeInfo: bestRoute
+        routeInfo: bestRoute,
+        userPublicKey: this.tradingWallet.publicKey,
       });
 
-      // Execute the transaction
-      const signature = await this.connection.sendTransaction(
-        swapTransaction as Transaction
-      );
+      // Sign and send the transaction
+      const signature = await swapTransaction.sign([this.tradingWallet]);
+      await this.connection.sendTransaction(swapTransaction);
 
       console.log('Trade executed successfully:', signature);
       
