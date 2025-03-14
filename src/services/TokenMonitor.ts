@@ -1,4 +1,6 @@
+
 import { blockchainService } from './BlockchainService';
+import { Connection } from '@solana/web3.js';
 
 interface Token {
   address: string;
@@ -19,6 +21,7 @@ export class TokenMonitor {
   private intervalId: NodeJS.Timeout | null = null;
   private tokens: Token[] = [];
   private onNewToken: ((token: Token) => void) | null = null;
+  private connection: Connection | null = null;
 
   private constructor() {}
 
@@ -35,31 +38,51 @@ export class TokenMonitor {
 
   async start() {
     if (this.intervalId) return;
+    
+    try {
+      const provider = await blockchainService.getProvider();
+      console.log('Starting token monitoring with provider:', provider);
+      
+      this.connection = new Connection(provider.rpcUrl);
+      console.log('Connected to Solana network:', provider.network);
 
-    const provider = await blockchainService.getProvider();
-    console.log('Monitoring tokens with provider:', provider);
+      // Subscribe to program accounts that create new tokens
+      const tokenProgramId = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
+      console.log('Monitoring token program:', tokenProgramId);
 
-    this.intervalId = setInterval(() => {
+      this.intervalId = setInterval(() => {
+        this.checkNewTokens();
+      }, 3 * 60 * 1000); // 3 minutes
+
+      // Initial check
       this.checkNewTokens();
-    }, 3 * 60 * 1000); // 3 minutes
-
-    // Initial check
-    this.checkNewTokens();
+    } catch (error) {
+      console.error('Error starting token monitor:', error);
+    }
   }
 
   stop() {
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
+      this.connection = null;
+      console.log('Token monitoring stopped');
     }
   }
 
   private async checkNewTokens() {
-    try {
-      const provider = await blockchainService.getProvider();
-      console.log('Checking new tokens using provider:', provider);
+    if (!this.connection) {
+      console.error('No connection available');
+      return;
+    }
 
-      // Mock implementation - replace with actual API call
+    try {
+      // Get recent token mint accounts
+      const signature = await this.connection.getRecentBlockhash();
+      console.log('Checking new tokens in block:', signature.blockhash);
+
+      // For now, just creating a mock token to test the flow
+      // This will be replaced with real token detection logic
       const mockNewToken: Token = {
         address: "0x" + Math.random().toString(16).slice(2, 42),
         name: "New Token " + Date.now(),
@@ -68,6 +91,8 @@ export class TokenMonitor {
       };
 
       this.tokens.push(mockNewToken);
+      console.log('New token detected:', mockNewToken);
+      
       if (this.onNewToken) {
         this.onNewToken(mockNewToken);
       }
@@ -77,7 +102,7 @@ export class TokenMonitor {
   }
 
   async analyzeToken(token: Token): Promise<TokenAnalysis> {
-    // Mock implementation - replace with actual analysis
+    // Mock implementation - will be replaced with real analysis
     return {
       isRugPull: false,
       maxHolderPercentage: Math.random() * 15,
@@ -90,3 +115,4 @@ export class TokenMonitor {
     return this.tokens;
   }
 }
+
