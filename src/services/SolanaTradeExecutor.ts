@@ -1,4 +1,3 @@
-
 import { Connection } from '@solana/web3.js';
 import { blockchainService } from './BlockchainService';
 import { jupiterTradeService } from './JupiterTradeService';
@@ -21,20 +20,17 @@ export class SolanaTradeExecutor {
   }
 
   async initialize() {
-    // If already initializing, wait for the existing initialization to complete
     if (this.initPromise) {
       console.log('Waiting for existing trade executor initialization to complete');
       await this.initPromise;
       return;
     }
 
-    // If already initialized, skip
     if (this.connection) {
       console.log('Trade executor already initialized');
       return;
     }
 
-    // Create a new initialization promise
     this.initPromise = this._initialize();
     try {
       await this.initPromise;
@@ -49,34 +45,40 @@ export class SolanaTradeExecutor {
       console.log('Starting trade executor initialization');
       
       const provider = await blockchainService.getProvider();
+      console.log('Got blockchain provider:', provider);
+      
       this.connection = new Connection(provider.rpcUrl, {
         commitment: 'confirmed',
         confirmTransactionInitialTimeout: 60000,
       });
+      console.log('Created Solana connection');
 
-      // Get the private key from Supabase secrets
       const { data: { secret: privateKey } } = await supabase.functions.invoke('get-secret', {
         body: { name: 'TRADING_WALLET_PRIVATE_KEY' }
       });
+      console.log('Retrieved private key from secrets');
 
       if (!privateKey) {
         throw new Error('Trading wallet private key not found');
       }
 
-      // Initialize Jupiter with the connection and private key
       await jupiterTradeService.initialize(this.connection);
-      jupiterTradeService.setTradingWallet(privateKey);
+      console.log('Initialized Jupiter trade service');
       
-      // Get wallet configuration from the database
+      jupiterTradeService.setTradingWallet(privateKey);
+      console.log('Set trading wallet');
+      
       const config = await configurationService.getTradeConfig();
       if (config?.wallet_address) {
         await configurationService.updateWalletAddress(config.wallet_address);
+        console.log('Updated wallet address:', config.wallet_address);
+      } else {
+        console.log('No wallet address found in config');
       }
       
       console.log('Trade executor initialized successfully');
     } catch (error) {
       console.error('Error initializing trade executor:', error);
-      // Clear state on error
       this.connection = null;
       throw error;
     } finally {
@@ -86,9 +88,12 @@ export class SolanaTradeExecutor {
 
   async getWalletBalance(): Promise<number> {
     if (!this.connection) {
+      console.log('Connection not initialized, initializing now...');
       await this.initialize();
     }
-    return jupiterTradeService.getWalletBalance();
+    const balance = await jupiterTradeService.getWalletBalance();
+    console.log('Retrieved wallet balance:', balance);
+    return balance;
   }
 
   async executePurchase(tokenAddress: string, amount: number): Promise<string> {

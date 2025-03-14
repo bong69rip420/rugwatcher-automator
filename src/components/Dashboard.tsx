@@ -14,20 +14,27 @@ export const Dashboard = () => {
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [loading, setLoading] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchBalance = async () => {
       try {
         setLoading(true);
+        setError(null);
+        console.log('Starting balance fetch...');
         await solanaTradeExecutor.initialize();
+        console.log('SolanaTradeExecutor initialized');
         const balance = await solanaTradeExecutor.getWalletBalance();
+        console.log('Balance fetched:', balance);
         setBalance(balance);
       } catch (error) {
         console.error('Error fetching wallet balance:', error);
+        const errorMessage = error instanceof Error ? error.message : "Please check your wallet configuration";
+        setError(errorMessage);
         toast({
           variant: "destructive",
           title: "Error fetching wallet balance",
-          description: error instanceof Error ? error.message : "Please check your wallet configuration"
+          description: errorMessage
         });
       } finally {
         setLoading(false);
@@ -72,6 +79,11 @@ export const Dashboard = () => {
                 <p className="font-medium">
                   {loading ? (
                     <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : error ? (
+                    <span className="text-red-400 flex items-center gap-1">
+                      <AlertCircle className="w-4 h-4" />
+                      Error loading balance
+                    </span>
                   ) : balance !== null ? (
                     `${balance.toFixed(4)} SOL`
                   ) : (
