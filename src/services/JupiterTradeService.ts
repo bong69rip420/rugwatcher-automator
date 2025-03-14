@@ -1,4 +1,3 @@
-
 import { Connection, PublicKey } from '@solana/web3.js';
 import { Jupiter } from '@jup-ag/core';
 import JSBI from 'jsbi';
@@ -69,11 +68,12 @@ export class JupiterTradeService {
         routeInfo: bestRoute
       });
 
-      // Execute the transaction
-      const txid = await result.execute();
-      console.log('Trade executed successfully:', txid);
+      // Execute the transaction and extract just the txid
+      const swapResult = await result.execute();
+      console.log('Trade executed successfully:', swapResult);
       
-      return txid;
+      // Return just the transaction ID string
+      return swapResult.txid;
     } catch (error) {
       console.error('Error executing trade:', error);
       throw error;
