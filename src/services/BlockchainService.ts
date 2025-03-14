@@ -3,7 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 
 export class BlockchainService {
   private static instance: BlockchainService;
-  private constructor() {}
+  
+  // Make constructor protected instead of private for singleton pattern
+  protected constructor() {}
 
   static getInstance(): BlockchainService {
     if (!BlockchainService.instance) {
@@ -13,15 +15,12 @@ export class BlockchainService {
   }
 
   async getProvider() {
-    const { data: config } = await supabase
-      .from('blockchain_config')
-      .select('*')
-      .single();
-
-    // Call the edge function to get configured provider
+    // Get provider configuration from edge function directly
+    // Removing the blockchain_config query that caused type errors
     const { data } = await supabase.functions.invoke('get-blockchain-provider');
     return data;
   }
 }
 
-export const blockchainService = new BlockchainService();
+// Export a singleton instance
+export const blockchainService = BlockchainService.getInstance();
