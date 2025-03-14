@@ -112,52 +112,26 @@ export class TokenMonitor {
     }
 
     try {
-      // Get and analyze holder distribution
-      const holders = await getTokenHolders(this.connection, token.address);
-      const { uniqueHolders, maxHolderPercentage } = analyzeHolderDistribution(holders);
-
-      // For now, we'll mock these checks until we implement proper contract analysis
-      const hasUnlimitedMint = Math.random() < 0.3;
-      const hasPausableTrading = Math.random() < 0.2;
-      const hasBlacklist = Math.random() < 0.1;
-      const volume24h = Math.random() * 10000;
-
-      const isSafe = uniqueHolders >= 100 &&
-        maxHolderPercentage <= 20 &&
-        !hasUnlimitedMint &&
-        !hasPausableTrading &&
-        !hasBlacklist &&
-        volume24h >= 2000;
-
+      const analysis = await analyzeToken(this.connection, token.address);
+      
       const details = [];
-      if (uniqueHolders < 100) details.push(`Only ${uniqueHolders} holders`);
-      if (maxHolderPercentage > 20) details.push(`Max holder owns ${maxHolderPercentage.toFixed(2)}%`);
-      if (hasUnlimitedMint) details.push('Unlimited mint function detected');
-      if (hasPausableTrading) details.push('Pausable trading function detected');
-      if (hasBlacklist) details.push('Blacklist function detected');
-      if (volume24h < 2000) details.push(`Low 24h volume: $${volume24h.toFixed(2)}`);
-
-      // Store analysis results
-      await storeTokenAnalysis(token.address, {
-        totalHolders: uniqueHolders,
-        maxHolderPercentage,
-        hasUnlimitedMint,
-        hasPausableTrading,
-        hasBlacklist,
-        volume24h,
-        isSafe
-      });
+      if (analysis.totalHolders < 100) details.push(`Only ${analysis.totalHolders} holders`);
+      if (analysis.maxHolderPercentage > 20) details.push(`Max holder owns ${analysis.maxHolderPercentage.toFixed(2)}%`);
+      if (analysis.hasUnlimitedMint) details.push('Unlimited mint function detected');
+      if (analysis.hasPausableTrading) details.push('Pausable trading function detected');
+      if (analysis.hasBlacklist) details.push('Blacklist function detected');
+      if (analysis.volume24h < 2000) details.push(`Low 24h volume: $${analysis.volume24h.toFixed(2)}`);
 
       return {
-        isRugPull: !isSafe,
-        maxHolderPercentage,
-        isSecure: isSafe,
+        isRugPull: !analysis.isSafe,
+        maxHolderPercentage: analysis.maxHolderPercentage,
+        isSecure: analysis.isSafe,
         details,
-        totalHolders: uniqueHolders,
-        hasUnlimitedMint,
-        hasPausableTrading,
-        hasBlacklist,
-        volume24h
+        totalHolders: analysis.totalHolders,
+        hasUnlimitedMint: analysis.hasUnlimitedMint,
+        hasPausableTrading: analysis.hasPausableTrading,
+        hasBlacklist: analysis.hasBlacklist,
+        volume24h: analysis.volume24h
       };
     } catch (error) {
       console.error('Error analyzing token:', error);

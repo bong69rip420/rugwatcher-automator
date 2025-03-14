@@ -1,4 +1,3 @@
-
 import { Connection, PublicKey } from '@solana/web3.js';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -50,6 +49,79 @@ export function analyzeHolderDistribution(holders: TokenHolder[]): {
   };
 }
 
+async function analyzeTokenContract(connection: Connection, tokenAddress: string) {
+  try {
+    const programAccount = await connection.getAccountInfo(new PublicKey(tokenAddress));
+    if (!programAccount?.data) {
+      throw new Error('Could not fetch program data');
+    }
+
+    const contractData = programAccount.data.toString();
+    
+    const hasUnlimitedMint = contractData.includes('mintTo') && 
+                            !contractData.includes('maxSupply') && 
+                            !contractData.includes('MAX_SUPPLY');
+    
+    const hasPausableTrading = contractData.includes('pause') || 
+                              contractData.includes('freeze') ||
+                              contractData.includes('suspend');
+    
+    const hasBlacklist = contractData.includes('blacklist') || 
+                        contractData.includes('blocklist') ||
+                        contractData.includes('excludeAccount');
+
+    return {
+      hasUnlimitedMint,
+      hasPausableTrading,
+      hasBlacklist
+    };
+  } catch (error) {
+    console.error('Error analyzing contract:', error);
+    return {
+      hasUnlimitedMint: true,
+      hasPausableTrading: true,
+      hasBlacklist: true
+    };
+  }
+}
+
+async function get24hVolume(connection: Connection, tokenAddress: string): Promise<number> {
+  try {
+    const signature = await connection.getSignaturesForAddress(
+      new PublicKey(tokenAddress),
+      { limit: 1000 }
+    );
+
+    const now = new Date();
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    
+    const recentSignatures = signature.filter(sig => 
+      sig.blockTime && (new Date(sig.blockTime * 1000) > oneDayAgo)
+    );
+
+    let volume = 0;
+    for (const sig of recentSignatures) {
+      const tx = await connection.getTransaction(sig.signature);
+      if (tx?.meta?.postTokenBalances && tx.meta.preTokenBalances) {
+        const tokenBalanceChanges = tx.meta.postTokenBalances
+          .filter(post => post.mint === tokenAddress)
+          .map((post, i) => {
+            const pre = tx.meta?.preTokenBalances?.[i];
+            return Math.abs((post.uiTokenAmount.uiAmount || 0) - 
+                          (pre?.uiTokenAmount.uiAmount || 0));
+          });
+        
+        volume += tokenBalanceChanges.reduce((sum, change) => sum + change, 0);
+      }
+    }
+
+    return volume;
+  } catch (error) {
+    console.error('Error calculating 24h volume:', error);
+    return 0;
+  }
+}
+
 export async function storeTokenAnalysis(tokenAddress: string, analysis: {
   totalHolders: number;
   maxHolderPercentage: number;
@@ -76,5 +148,39 @@ export async function storeTokenAnalysis(tokenAddress: string, analysis: {
     if (error) throw error;
   } catch (error) {
     console.error('Error storing token analysis:', error);
+  }
+}
+
+export async function analyzeToken(connection: Connection, tokenAddress: string) {
+  try {
+    const holders = await getTokenHolders(connection, tokenAddress);
+    const { uniqueHolders, maxHolderPercentage } = analyzeHolderDistribution(holders);
+
+    const contractAnalysis = await analyzeTokenContract(connection, tokenAddress);
+
+    const volume24h = await get24hVolume(connection, tokenAddress);
+
+    const isSafe = uniqueHolders >= 100 &&
+      maxHolderPercentage <= 20 &&
+      !contractAnalysis.hasUnlimitedMint &&
+      !contractAnalysis.hasPausableTrading &&
+      !contractAnalysis.hasBlacklist &&
+      volume24h >= 2000;
+
+    const analysis = {
+      totalHolders: uniqueHolders,
+      maxHolderPercentage,
+      hasUnlimitedMint: contractAnalysis.hasUnlimitedMint,
+      hasPausableTrading: contractAnalysis.hasPausableTrading,
+      hasBlacklist: contractAnalysis.hasBlacklist,
+      volume24h,
+      isSafe
+    };
+
+    await storeTokenAnalysis(tokenAddress, analysis);
+    return analysis;
+  } catch (error) {
+    console.error('Error performing token analysis:', error);
+    throw error;
   }
 }
