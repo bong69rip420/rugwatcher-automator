@@ -1,6 +1,16 @@
 
 import { supabase } from '@/integrations/supabase/client';
 
+interface TradeConfig {
+  id: string;
+  max_trade_amount: number;
+  min_liquidity: number;
+  is_active: boolean;
+  wallet_private_key?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export class ConfigurationService {
   private static instance: ConfigurationService;
 
@@ -13,7 +23,7 @@ export class ConfigurationService {
     return ConfigurationService.instance;
   }
 
-  async getTradeConfig() {
+  async getTradeConfig(): Promise<TradeConfig | null> {
     const { data, error } = await supabase
       .from('trading_config')
       .select('*')

@@ -26,7 +26,6 @@ export class JupiterTradeService {
     this.jupiter = await Jupiter.load({
       connection,
       cluster: 'mainnet-beta',
-      userPublicKey: this.tradingWallet?.publicKey // Will be null until wallet is set
     });
     
     console.log('Jupiter trade service initialized');
@@ -71,8 +70,7 @@ export class JupiterTradeService {
         outputMint,
         amount: JSBI.BigInt(amount * 1_000_000), // Convert to USDC decimals
         slippageBps: 100,
-        forceFetch: true,
-        userPublicKey: this.tradingWallet.publicKey // Important: Add the wallet's public key
+        forceFetch: true
       });
 
       if (routes.routesInfos.length === 0) {
@@ -87,29 +85,21 @@ export class JupiterTradeService {
         priceImpactPct: bestRoute.priceImpactPct,
       });
 
-      // Execute the exchange with the wallet
-      const result = await this.jupiter.exchange({
-        routeInfo: bestRoute,
-        userPublicKey: this.tradingWallet.publicKey,
-        wallet: {
-          sendTransaction: async (transaction, connection) => {
-            transaction.sign(this.tradingWallet!);
-            const signature = await connection.sendRawTransaction(transaction.serialize());
-            await connection.confirmTransaction(signature, 'confirmed');
-            return signature;
-          }
-        }
+      // Execute the exchange
+      const transaction = await this.jupiter.createTransaction({
+        routeInfo: bestRoute
       });
 
-      const swapResult = await result.execute();
+      // Sign and send transaction
+      transaction.transaction.sign(this.tradingWallet);
+      const signature = await this.connection.sendRawTransaction(
+        transaction.transaction.serialize()
+      );
       
-      if ('error' in swapResult) {
-        throw new Error('Swap failed: ' + swapResult.error);
-      }
-
-      console.log('Trade executed successfully:', swapResult.txid);
+      await this.connection.confirmTransaction(signature, 'confirmed');
+      console.log('Trade executed successfully:', signature);
       
-      return swapResult.txid;
+      return signature;
     } catch (error) {
       console.error('Error executing trade:', error);
       throw error;
