@@ -62,7 +62,7 @@ export const Dashboard = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-white p-8">
       <div className="max-w-7xl mx-auto space-y-8">
-        <div className="flex justify-between items-center">
+        <div className="flex justify-between items-center gap-4">
           <h1 className="text-4xl font-bold">Crypto Trading Bot</h1>
           <div className="flex items-center gap-4">
             <Card className="bg-gray-800/50 p-4 flex items-center gap-2">
@@ -92,6 +92,7 @@ export const Dashboard = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* Recent Tokens Card */}
           <Card className="p-6 backdrop-blur-lg bg-card">
             <h2 className="text-2xl font-semibold mb-4">Recent Tokens</h2>
             <div className="space-y-4">
@@ -115,6 +116,7 @@ export const Dashboard = () => {
             </div>
           </Card>
 
+          {/* Recent Trades Card */}
           <Card className="p-6 backdrop-blur-lg bg-card">
             <h2 className="text-2xl font-semibold mb-4">Recent Trades</h2>
             <div className="space-y-4">
