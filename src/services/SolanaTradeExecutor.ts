@@ -1,7 +1,9 @@
+
 import { Connection } from '@solana/web3.js';
 import { blockchainService } from './BlockchainService';
 import { jupiterTradeService } from './JupiterTradeService';
 import { configurationService } from './ConfigurationService';
+import { supabase } from '@/integrations/supabase/client';
 
 export class SolanaTradeExecutor {
   private static instance: SolanaTradeExecutor;
@@ -51,8 +53,19 @@ export class SolanaTradeExecutor {
         commitment: 'confirmed',
         confirmTransactionInitialTimeout: 60000,
       });
-      
+
+      // Get the private key from Supabase secrets
+      const { data: { secret: privateKey } } = await supabase.functions.invoke('get-secret', {
+        body: { name: 'TRADING_WALLET_PRIVATE_KEY' }
+      });
+
+      if (!privateKey) {
+        throw new Error('Trading wallet private key not found');
+      }
+
+      // Initialize Jupiter with the connection and private key
       await jupiterTradeService.initialize(this.connection);
+      jupiterTradeService.setTradingWallet(privateKey);
       
       // Get wallet configuration from the database
       const config = await configurationService.getTradeConfig();
