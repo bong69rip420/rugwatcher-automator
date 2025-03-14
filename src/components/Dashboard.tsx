@@ -32,17 +32,18 @@ export const Dashboard = () => {
         setBalance(balance);
       } catch (error) {
         console.error('Error fetching wallet balance:', error);
+        toast({
+          variant: "destructive",
+          title: "Error fetching wallet balance",
+          description: "Please check your wallet connection"
+        });
       }
     };
 
-    // Initial fetch
     fetchBalance();
-
-    // Set up interval to refresh balance every 30 seconds
     const interval = setInterval(fetchBalance, 30000);
-
     return () => clearInterval(interval);
-  }, []);
+  }, [toast]);
 
   const handleToggleMonitoring = () => {
     const tokenMonitor = TokenMonitor.getInstance();
@@ -61,7 +62,7 @@ export const Dashboard = () => {
           <h1 className="text-4xl font-bold">Crypto Trading Bot</h1>
           <div className="flex items-center gap-4">
             <Card className="bg-gray-800/50 p-4 flex items-center gap-2">
-              <Wallet className="w-5 h-5" />
+              <Wallet className="w-5 h-5 text-green-400" />
               <div>
                 <p className="text-sm text-gray-400">Wallet Balance</p>
                 <p className="font-medium">
