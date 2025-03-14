@@ -9,6 +9,7 @@ export class JupiterTradeService {
   private jupiter: Jupiter | null = null;
   private tradingWallet: Keypair | null = null;
   private isInitializing = false;
+  private initPromise: Promise<void> | null = null;
 
   private constructor() {}
 
@@ -20,28 +21,43 @@ export class JupiterTradeService {
   }
 
   async initialize(connection: Connection) {
-    if (this.isInitializing) {
-      console.log('Jupiter initialization already in progress');
+    if (this.initPromise) {
+      console.log('Waiting for existing Jupiter initialization to complete');
+      await this.initPromise;
       return;
     }
 
-    if (this.jupiter) {
-      console.log('Jupiter already initialized');
+    if (this.jupiter && this.connection === connection) {
+      console.log('Jupiter already initialized with the same connection');
       return;
     }
 
+    this.initPromise = this._initialize(connection);
+    try {
+      await this.initPromise;
+    } finally {
+      this.initPromise = null;
+    }
+  }
+
+  private async _initialize(connection: Connection) {
     try {
       this.isInitializing = true;
+      console.log('Starting Jupiter initialization');
+      
       this.connection = connection;
       
       this.jupiter = await Jupiter.load({
         connection,
         cluster: 'mainnet-beta',
+        commitment: 'confirmed',
       });
       
       console.log('Jupiter trade service initialized successfully');
     } catch (error) {
       console.error('Error initializing Jupiter:', error);
+      this.jupiter = null;
+      this.connection = null;
       throw error;
     } finally {
       this.isInitializing = false;
@@ -65,44 +81,66 @@ export class JupiterTradeService {
     }
 
     try {
-      const config = await configurationService.getTradeConfig();
-      console.log('Using trade config:', config);
+      const retryCount = 3;
+      let lastError: Error | null = null;
 
-      const inputMint = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'); // USDC
-      const outputMint = new PublicKey(tokenAddress);
+      for (let i = 0; i < retryCount; i++) {
+        try {
+          const config = await configurationService.getTradeConfig();
+          console.log('Using trade config:', config);
 
-      const routes = await this.jupiter.computeRoutes({
-        inputMint,
-        outputMint,
-        amount: JSBI.BigInt(amount * 1_000_000), // Convert to USDC decimals
-        slippageBps: 100,
-        forceFetch: true
-      });
+          const inputMint = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
+          const outputMint = new PublicKey(tokenAddress);
 
-      if (routes.routesInfos.length === 0) {
-        throw new Error('No routes found for trade');
+          const routes = await this.jupiter.computeRoutes({
+            inputMint,
+            outputMint,
+            amount: JSBI.BigInt(amount * 1_000_000),
+            slippageBps: 100,
+            forceFetch: true,
+            commitment: 'confirmed'
+          });
+
+          if (routes.routesInfos.length === 0) {
+            throw new Error('No routes found for trade');
+          }
+
+          const bestRoute = routes.routesInfos[0];
+          console.log('Selected route:', {
+            inAmount: bestRoute.inAmount,
+            outAmount: bestRoute.outAmount,
+            priceImpactPct: bestRoute.priceImpactPct,
+          });
+
+          const { swapTransaction } = await this.jupiter.exchange({
+            routeInfo: bestRoute,
+            userPublicKey: this.tradingWallet.publicKey,
+          });
+
+          if (swapTransaction instanceof VersionedTransaction) {
+            swapTransaction.sign([this.tradingWallet]);
+            const signature = await this.connection.sendRawTransaction(swapTransaction.serialize(), {
+              skipPreflight: false,
+              preflightCommitment: 'confirmed',
+              maxRetries: 3,
+            });
+            console.log('Trade executed successfully:', signature);
+            return signature;
+          } else {
+            throw new Error('Expected VersionedTransaction but received different transaction type');
+          }
+        } catch (error) {
+          console.error(`Attempt ${i + 1} failed:`, error);
+          lastError = error;
+          continue;
+        }
       }
 
-      const bestRoute = routes.routesInfos[0];
-      console.log('Selected route:', {
-        inAmount: bestRoute.inAmount,
-        outAmount: bestRoute.outAmount,
-        priceImpactPct: bestRoute.priceImpactPct,
-      });
-
-      const { swapTransaction } = await this.jupiter.exchange({
-        routeInfo: bestRoute,
-        userPublicKey: this.tradingWallet.publicKey,
-      });
-
-      if (swapTransaction instanceof VersionedTransaction) {
-        swapTransaction.sign([this.tradingWallet]);
-        const signature = await this.connection.sendRawTransaction(swapTransaction.serialize());
-        console.log('Trade executed successfully:', signature);
-        return signature;
-      } else {
-        throw new Error('Expected VersionedTransaction but received different transaction type');
+      if (lastError) {
+        throw lastError;
       }
+
+      throw new Error('Failed to execute trade after retries');
     } catch (error) {
       console.error('Error executing trade:', error);
       throw error;

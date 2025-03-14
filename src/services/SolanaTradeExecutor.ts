@@ -8,6 +8,7 @@ export class SolanaTradeExecutor {
   private static instance: SolanaTradeExecutor;
   private connection: Connection | null = null;
   private isInitializing = false;
+  private initPromise: Promise<void> | null = null;
 
   private constructor() {}
 
@@ -19,20 +20,38 @@ export class SolanaTradeExecutor {
   }
 
   async initialize() {
-    if (this.isInitializing) {
-      console.log('Trade executor initialization already in progress');
+    // If already initializing, wait for the existing initialization to complete
+    if (this.initPromise) {
+      console.log('Waiting for existing trade executor initialization to complete');
+      await this.initPromise;
       return;
     }
 
+    // If already initialized, skip
     if (this.connection) {
       console.log('Trade executor already initialized');
       return;
     }
 
+    // Create a new initialization promise
+    this.initPromise = this._initialize();
+    try {
+      await this.initPromise;
+    } finally {
+      this.initPromise = null;
+    }
+  }
+
+  private async _initialize() {
     try {
       this.isInitializing = true;
+      console.log('Starting trade executor initialization');
+      
       const provider = await blockchainService.getProvider();
-      this.connection = new Connection(provider.rpcUrl);
+      this.connection = new Connection(provider.rpcUrl, {
+        commitment: 'confirmed',
+        confirmTransactionInitialTimeout: 60000,
+      });
       
       await jupiterTradeService.initialize(this.connection);
       
@@ -47,6 +66,8 @@ export class SolanaTradeExecutor {
       console.log('Trade executor initialized successfully');
     } catch (error) {
       console.error('Error initializing trade executor:', error);
+      // Clear state on error
+      this.connection = null;
       throw error;
     } finally {
       this.isInitializing = false;
