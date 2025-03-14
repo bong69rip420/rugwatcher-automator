@@ -49,7 +49,7 @@ export function analyzeHolderDistribution(holders: TokenHolder[]): {
   };
 }
 
-async function analyzeTokenContract(connection: Connection, tokenAddress: string) {
+export async function analyzeTokenContract(connection: Connection, tokenAddress: string) {
   try {
     const programAccount = await connection.getAccountInfo(new PublicKey(tokenAddress));
     if (!programAccount?.data) {
@@ -85,7 +85,7 @@ async function analyzeTokenContract(connection: Connection, tokenAddress: string
   }
 }
 
-async function get24hVolume(connection: Connection, tokenAddress: string): Promise<number> {
+export async function get24hVolume(connection: Connection, tokenAddress: string): Promise<number> {
   try {
     const signature = await connection.getSignaturesForAddress(
       new PublicKey(tokenAddress),
