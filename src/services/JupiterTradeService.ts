@@ -1,3 +1,4 @@
+
 import { Connection, PublicKey } from '@solana/web3.js';
 import { Jupiter } from '@jup-ag/core';
 import JSBI from 'jsbi';
@@ -68,17 +69,16 @@ export class JupiterTradeService {
         routeInfo: bestRoute
       });
 
-      // Execute the transaction and get the first signature
+      // Execute the transaction
       const swapResult = await result.execute();
       
       if ('error' in swapResult) {
         throw new Error('Swap failed: ' + swapResult.error);
       }
 
-      const signature = swapResult.signatures[0];
-      console.log('Trade executed successfully:', signature);
+      console.log('Trade executed successfully:', swapResult.txid);
       
-      return signature;
+      return swapResult.txid;
     } catch (error) {
       console.error('Error executing trade:', error);
       throw error;
