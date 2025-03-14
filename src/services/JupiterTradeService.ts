@@ -1,5 +1,5 @@
 
-import { Connection, PublicKey, Keypair } from '@solana/web3.js';
+import { Connection, PublicKey, Keypair, VersionedTransaction } from '@solana/web3.js';
 import { Jupiter } from '@jup-ag/core';
 import JSBI from 'jsbi';
 import { configurationService } from './ConfigurationService';
@@ -80,12 +80,15 @@ export class JupiterTradeService {
       });
 
       // Sign and send the transaction
-      const signature = await swapTransaction.sign([this.tradingWallet]);
-      await this.connection.sendTransaction(swapTransaction);
-
-      console.log('Trade executed successfully:', signature);
-      
-      return signature;
+      if (swapTransaction instanceof VersionedTransaction) {
+        swapTransaction.sign([this.tradingWallet]);
+        const signature = await this.connection.sendRawTransaction(swapTransaction.serialize());
+        
+        console.log('Trade executed successfully:', signature);
+        return signature;
+      } else {
+        throw new Error('Expected VersionedTransaction but received different transaction type');
+      }
     } catch (error) {
       console.error('Error executing trade:', error);
       throw error;
@@ -94,3 +97,4 @@ export class JupiterTradeService {
 }
 
 export const jupiterTradeService = JupiterTradeService.getInstance();
+
