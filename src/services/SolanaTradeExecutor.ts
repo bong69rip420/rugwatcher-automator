@@ -1,4 +1,3 @@
-
 import { Connection } from '@solana/web3.js';
 import { blockchainService } from './BlockchainService';
 import { jupiterTradeService } from './JupiterTradeService';
@@ -72,6 +71,13 @@ export class SolanaTradeExecutor {
     } finally {
       this.isInitializing = false;
     }
+  }
+
+  async getWalletBalance(): Promise<number> {
+    if (!this.connection) {
+      await this.initialize();
+    }
+    return jupiterTradeService.getWalletBalance();
   }
 
   async executePurchase(tokenAddress: string, amount: number): Promise<string> {

@@ -1,18 +1,19 @@
-
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { TokenMonitor } from "@/services/TokenMonitor";
 import { TradingService } from "@/services/TradingService";
-import { AlertCircle, CheckCircle, RefreshCw } from "lucide-react";
+import { AlertCircle, CheckCircle, RefreshCw, Wallet } from "lucide-react";
 import { supabaseService, type Token, type Trade } from "@/services/SupabaseService";
 import { useQuery } from "@tanstack/react-query";
+import { solanaTradeExecutor } from "@/services/SolanaTradeExecutor";
 
 export const Dashboard = () => {
   const { toast } = useToast();
   const [isMonitoring, setIsMonitoring] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [balance, setBalance] = useState<number | null>(null);
 
   const { data: tokens = [], refetch: refetchTokens } = useQuery({
     queryKey: ['tokens'],
@@ -25,52 +26,22 @@ export const Dashboard = () => {
   });
 
   useEffect(() => {
-    const tokenMonitor = TokenMonitor.getInstance();
-
-    tokenMonitor.setOnNewToken(async (token) => {
-      // Add token to Supabase
-      const newToken = await supabaseService.addToken({
-        address: token.address,
-        name: token.name,
-        symbol: token.symbol,
-      });
-
-      if (newToken) {
-        refetchTokens();
-        toast({
-          title: "New Token Detected",
-          description: `${newToken.name} (${newToken.symbol}) has been listed`,
-        });
-
-        const analysis = await tokenMonitor.analyzeToken(token);
-        if (analysis.isSecure) {
-          setLoading(true);
-          const tradingService = TradingService.getInstance();
-          const trade = await tradingService.executeTrade(token.address, 0.1);
-          
-          await supabaseService.addTrade({
-            token_address: trade.tokenAddress,
-            amount: trade.amount,
-            price: null,
-            status: trade.status,
-            transaction_hash: null,
-          });
-
-          refetchTrades();
-          setLoading(false);
-
-          toast({
-            title: trade.status === "completed" ? "Trade Executed" : "Trade Failed",
-            description: `${token.symbol}: ${trade.status}`,
-            variant: trade.status === "completed" ? "default" : "destructive",
-          });
-        }
+    const fetchBalance = async () => {
+      try {
+        const balance = await solanaTradeExecutor.getWalletBalance();
+        setBalance(balance);
+      } catch (error) {
+        console.error('Error fetching wallet balance:', error);
       }
-    });
-
-    return () => {
-      tokenMonitor.stop();
     };
+
+    // Initial fetch
+    fetchBalance();
+
+    // Set up interval to refresh balance every 30 seconds
+    const interval = setInterval(fetchBalance, 30000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const handleToggleMonitoring = () => {
@@ -88,14 +59,25 @@ export const Dashboard = () => {
       <div className="max-w-7xl mx-auto space-y-8">
         <div className="flex justify-between items-center">
           <h1 className="text-4xl font-bold">Crypto Trading Bot</h1>
-          <Button
-            onClick={handleToggleMonitoring}
-            variant={isMonitoring ? "destructive" : "default"}
-            className="flex items-center gap-2"
-          >
-            <RefreshCw className={`w-4 h-4 ${isMonitoring ? "animate-spin" : ""}`} />
-            {isMonitoring ? "Stop Monitoring" : "Start Monitoring"}
-          </Button>
+          <div className="flex items-center gap-4">
+            <Card className="bg-gray-800/50 p-4 flex items-center gap-2">
+              <Wallet className="w-5 h-5" />
+              <div>
+                <p className="text-sm text-gray-400">Wallet Balance</p>
+                <p className="font-medium">
+                  {balance !== null ? `${balance.toFixed(4)} SOL` : 'Loading...'}
+                </p>
+              </div>
+            </Card>
+            <Button
+              onClick={handleToggleMonitoring}
+              variant={isMonitoring ? "destructive" : "default"}
+              className="flex items-center gap-2"
+            >
+              <RefreshCw className={`w-4 h-4 ${isMonitoring ? "animate-spin" : ""}`} />
+              {isMonitoring ? "Stop Monitoring" : "Start Monitoring"}
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
