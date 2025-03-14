@@ -68,12 +68,17 @@ export class JupiterTradeService {
         routeInfo: bestRoute
       });
 
-      // Execute the transaction and extract just the txid
+      // Execute the transaction and get the first signature
       const swapResult = await result.execute();
-      console.log('Trade executed successfully:', swapResult);
       
-      // Return just the transaction ID string
-      return swapResult.txid;
+      if ('error' in swapResult) {
+        throw new Error('Swap failed: ' + swapResult.error);
+      }
+
+      const signature = swapResult.signatures[0];
+      console.log('Trade executed successfully:', signature);
+      
+      return signature;
     } catch (error) {
       console.error('Error executing trade:', error);
       throw error;
