@@ -1,4 +1,5 @@
-import { Connection, PublicKey } from '@solana/web3.js';
+
+import { Connection, PublicKey, Transaction } from '@solana/web3.js';
 import { Jupiter } from '@jup-ag/core';
 import JSBI from 'jsbi';
 import { configurationService } from './ConfigurationService';
@@ -20,7 +21,6 @@ export class JupiterTradeService {
   async initialize(connection: Connection) {
     this.connection = connection;
     
-    // Initialize Jupiter instance
     this.jupiter = await Jupiter.load({
       connection,
       cluster: 'mainnet-beta',
@@ -38,11 +38,10 @@ export class JupiterTradeService {
       const config = await configurationService.getTradeConfig();
       console.log('Using trade config:', config);
 
-      // USDC is commonly used as input token
+      // USDC input token
       const inputMint = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'); // USDC
       const outputMint = new PublicKey(tokenAddress);
 
-      // Get routes for the swap
       const routes = await this.jupiter.computeRoutes({
         inputMint,
         outputMint,
@@ -55,7 +54,6 @@ export class JupiterTradeService {
         throw new Error('No routes found for trade');
       }
 
-      // Select best route
       const bestRoute = routes.routesInfos[0];
       console.log('Selected route:', {
         inAmount: bestRoute.inAmount,
@@ -63,21 +61,19 @@ export class JupiterTradeService {
         priceImpactPct: bestRoute.priceImpactPct,
       });
 
-      // Execute the exchange using the Jupiter.exchange() method.
-      const result = await this.jupiter.exchange({
+      // Get the serialized transactions for the swap
+      const { swapTransaction } = await this.jupiter.exchange({
         routeInfo: bestRoute
       });
 
       // Execute the transaction
-      const swapResult = await result.execute();
-      
-      if ('error' in swapResult) {
-        throw new Error('Swap failed: ' + swapResult.error);
-      }
+      const signature = await this.connection.sendTransaction(
+        swapTransaction as Transaction
+      );
 
-      console.log('Trade executed successfully:', swapResult.txid);
+      console.log('Trade executed successfully:', signature);
       
-      return swapResult.txid;
+      return signature;
     } catch (error) {
       console.error('Error executing trade:', error);
       throw error;
@@ -86,4 +82,3 @@ export class JupiterTradeService {
 }
 
 export const jupiterTradeService = JupiterTradeService.getInstance();
-

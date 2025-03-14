@@ -1,4 +1,3 @@
-
 import { blockchainService } from './BlockchainService';
 import { Connection } from '@solana/web3.js';
 import { Token } from '@/types/token';
@@ -84,6 +83,15 @@ export class TokenMonitor {
         symbol: "NT" + Math.floor(Math.random() * 1000),
         timestamp: Date.now(),
       };
+
+      // Check if token is less than 48 hours old
+      const tokenAge = Date.now() - mockNewToken.timestamp;
+      const MAX_AGE = 48 * 60 * 60 * 1000; // 48 hours in milliseconds
+
+      if (tokenAge > MAX_AGE) {
+        console.log('Token too old, skipping:', mockNewToken.symbol);
+        return;
+      }
 
       this.tokens.push(mockNewToken);
       console.log('New token detected:', mockNewToken);
