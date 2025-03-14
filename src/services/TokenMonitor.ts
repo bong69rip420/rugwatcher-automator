@@ -1,27 +1,9 @@
+
 import { blockchainService } from './BlockchainService';
 import { Connection } from '@solana/web3.js';
-import { getTokenHolders, analyzeHolderDistribution, analyzeTokenContract, get24hVolume, storeTokenAnalysis } from '@/utils/tokenAnalysis';
+import { Token } from '@/types/token';
 import { SolanaTradeExecutor } from './SolanaTradeExecutor';
-
-interface Token {
-  address: string;
-  name: string;
-  symbol: string;
-  timestamp: number;
-}
-
-interface TokenAnalysis {
-  isRugPull: boolean;
-  maxHolderPercentage: number;
-  isSecure: boolean;
-  details: string[];
-  totalHolders: number;
-  hasUnlimitedMint: boolean;
-  hasPausableTrading: boolean;
-  hasBlacklist: boolean;
-  volume24h: number;
-  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
-}
+import { TokenAnalyzer } from './TokenAnalyzer';
 
 export class TokenMonitor {
   private static instance: TokenMonitor;
@@ -29,6 +11,8 @@ export class TokenMonitor {
   private tokens: Token[] = [];
   private onNewToken: ((token: Token) => void) | null = null;
   private connection: Connection | null = null;
+  private tokenAnalyzer: TokenAnalyzer | null = null;
+  private tradeExecutor: SolanaTradeExecutor | null = null;
 
   private constructor() {}
 
@@ -53,11 +37,12 @@ export class TokenMonitor {
       this.connection = new Connection(provider.rpcUrl);
       console.log('Connected to Solana network:', provider.network);
 
-      // Initialize trade executor
-      const tradeExecutor = SolanaTradeExecutor.getInstance();
-      await tradeExecutor.initialize();
+      if (this.connection) {
+        this.tokenAnalyzer = TokenAnalyzer.getInstance(this.connection);
+        this.tradeExecutor = SolanaTradeExecutor.getInstance();
+        await this.tradeExecutor.initialize();
+      }
 
-      // Subscribe to program accounts that create new tokens
       const tokenProgramId = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
       console.log('Monitoring token program:', tokenProgramId);
 
@@ -65,7 +50,6 @@ export class TokenMonitor {
         this.checkNewTokens();
       }, 3 * 60 * 1000); // 3 minutes
 
-      // Initial check
       this.checkNewTokens();
     } catch (error) {
       console.error('Error starting token monitor:', error);
@@ -77,23 +61,23 @@ export class TokenMonitor {
       clearInterval(this.intervalId);
       this.intervalId = null;
       this.connection = null;
+      this.tokenAnalyzer = null;
+      this.tradeExecutor = null;
       console.log('Token monitoring stopped');
     }
   }
 
   private async checkNewTokens() {
-    if (!this.connection) {
-      console.error('No connection available');
+    if (!this.connection || !this.tokenAnalyzer || !this.tradeExecutor) {
+      console.error('Required services not initialized');
       return;
     }
 
     try {
-      // Get recent token mint accounts
       const signature = await this.connection.getRecentBlockhash();
       console.log('Checking new tokens in block:', signature.blockhash);
 
-      // For now, just creating a mock token to test the flow
-      // This will be replaced with real token detection logic
+      // Mock token for testing - will be replaced with real token detection
       const mockNewToken: Token = {
         address: "0x" + Math.random().toString(16).slice(2, 42),
         name: "New Token " + Date.now(),
@@ -107,80 +91,26 @@ export class TokenMonitor {
       if (this.onNewToken) {
         this.onNewToken(mockNewToken);
       }
+
+      // Analyze token and execute trade if safe
+      const analysis = await this.tokenAnalyzer.analyzeToken(mockNewToken);
+      if (analysis.isSecure) {
+        const txHash = await this.tradeExecutor.executePurchase(mockNewToken.address, 0.1);
+        console.log('Trade executed successfully:', txHash);
+      }
     } catch (error) {
       console.error("Error checking new tokens:", error);
     }
   }
 
-  async analyzeToken(token: Token): Promise<TokenAnalysis> {
-    if (!this.connection) {
-      throw new Error('No connection available');
-    }
-
-    try {
-      const holders = await getTokenHolders(this.connection, token.address);
-      const { uniqueHolders, maxHolderPercentage } = analyzeHolderDistribution(holders);
-      
-      const contractAnalysis = await analyzeTokenContract(this.connection, token.address);
-      const volume24h = await get24hVolume(this.connection, token.address);
-
-      const isSafe = uniqueHolders >= 100 &&
-        maxHolderPercentage <= 20 &&
-        !contractAnalysis.hasUnlimitedMint &&
-        !contractAnalysis.hasPausableTrading &&
-        !contractAnalysis.hasBlacklist &&
-        volume24h >= 2000;
-
-      const details = [];
-      if (uniqueHolders < 100) details.push(`Only ${uniqueHolders} holders`);
-      if (maxHolderPercentage > 20) details.push(`Max holder owns ${maxHolderPercentage.toFixed(2)}%`);
-      if (contractAnalysis.hasUnlimitedMint) details.push('Unlimited mint function detected');
-      if (contractAnalysis.hasPausableTrading) details.push('Pausable trading function detected');
-      if (contractAnalysis.hasBlacklist) details.push('Blacklist function detected');
-      if (volume24h < 2000) details.push(`Low 24h volume: $${volume24h.toFixed(2)}`);
-
-      const analysis = {
-        isRugPull: !isSafe,
-        maxHolderPercentage,
-        isSecure: isSafe,
-        details,
-        totalHolders: uniqueHolders,
-        hasUnlimitedMint: contractAnalysis.hasUnlimitedMint,
-        hasPausableTrading: contractAnalysis.hasPausableTrading,
-        hasBlacklist: contractAnalysis.hasBlacklist,
-        volume24h,
-        riskLevel: contractAnalysis.riskLevel
-      };
-
-      // If token is safe, execute a trade
-      if (isSafe) {
-        try {
-          const tradeExecutor = SolanaTradeExecutor.getInstance();
-          const txHash = await tradeExecutor.executePurchase(token.address, 0.1); // Start with small amount
-          console.log('Trade executed successfully:', txHash);
-        } catch (error) {
-          console.error('Failed to execute trade:', error);
-        }
-      }
-
-      await storeTokenAnalysis(token.address, {
-        totalHolders: uniqueHolders,
-        maxHolderPercentage,
-        hasUnlimitedMint: contractAnalysis.hasUnlimitedMint,
-        hasPausableTrading: contractAnalysis.hasPausableTrading,
-        hasBlacklist: contractAnalysis.hasBlacklist,
-        volume24h,
-        riskLevel: contractAnalysis.riskLevel
-      });
-
-      return analysis;
-    } catch (error) {
-      console.error('Error analyzing token:', error);
-      throw error;
-    }
-  }
-
   getTokens(): Token[] {
     return this.tokens;
+  }
+
+  async analyzeToken(token: Token) {
+    if (!this.tokenAnalyzer) {
+      throw new Error('Token analyzer not initialized');
+    }
+    return this.tokenAnalyzer.analyzeToken(token);
   }
 }
