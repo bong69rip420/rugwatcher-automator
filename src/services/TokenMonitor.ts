@@ -1,6 +1,6 @@
 import { blockchainService } from './BlockchainService';
 import { Connection } from '@solana/web3.js';
-import { getTokenHolders, analyzeHolderDistribution, storeTokenAnalysis } from '@/utils/tokenAnalysis';
+import { getTokenHolders, analyzeHolderDistribution, analyzeTokenContract, get24hVolume, storeTokenAnalysis } from '@/utils/tokenAnalysis';
 
 interface Token {
   address: string;
@@ -112,27 +112,50 @@ export class TokenMonitor {
     }
 
     try {
-      const analysis = await analyzeToken(this.connection, token.address);
+      const holders = await getTokenHolders(this.connection, token.address);
+      const { uniqueHolders, maxHolderPercentage } = analyzeHolderDistribution(holders);
       
-      const details = [];
-      if (analysis.totalHolders < 100) details.push(`Only ${analysis.totalHolders} holders`);
-      if (analysis.maxHolderPercentage > 20) details.push(`Max holder owns ${analysis.maxHolderPercentage.toFixed(2)}%`);
-      if (analysis.hasUnlimitedMint) details.push('Unlimited mint function detected');
-      if (analysis.hasPausableTrading) details.push('Pausable trading function detected');
-      if (analysis.hasBlacklist) details.push('Blacklist function detected');
-      if (analysis.volume24h < 2000) details.push(`Low 24h volume: $${analysis.volume24h.toFixed(2)}`);
+      const contractAnalysis = await analyzeTokenContract(this.connection, token.address);
+      const volume24h = await get24hVolume(this.connection, token.address);
 
-      return {
-        isRugPull: !analysis.isSafe,
-        maxHolderPercentage: analysis.maxHolderPercentage,
-        isSecure: analysis.isSafe,
+      const isSafe = uniqueHolders >= 100 &&
+        maxHolderPercentage <= 20 &&
+        !contractAnalysis.hasUnlimitedMint &&
+        !contractAnalysis.hasPausableTrading &&
+        !contractAnalysis.hasBlacklist &&
+        volume24h >= 2000;
+
+      const details = [];
+      if (uniqueHolders < 100) details.push(`Only ${uniqueHolders} holders`);
+      if (maxHolderPercentage > 20) details.push(`Max holder owns ${maxHolderPercentage.toFixed(2)}%`);
+      if (contractAnalysis.hasUnlimitedMint) details.push('Unlimited mint function detected');
+      if (contractAnalysis.hasPausableTrading) details.push('Pausable trading function detected');
+      if (contractAnalysis.hasBlacklist) details.push('Blacklist function detected');
+      if (volume24h < 2000) details.push(`Low 24h volume: $${volume24h.toFixed(2)}`);
+
+      const analysis = {
+        isRugPull: !isSafe,
+        maxHolderPercentage,
+        isSecure: isSafe,
         details,
-        totalHolders: analysis.totalHolders,
-        hasUnlimitedMint: analysis.hasUnlimitedMint,
-        hasPausableTrading: analysis.hasPausableTrading,
-        hasBlacklist: analysis.hasBlacklist,
-        volume24h: analysis.volume24h
+        totalHolders: uniqueHolders,
+        hasUnlimitedMint: contractAnalysis.hasUnlimitedMint,
+        hasPausableTrading: contractAnalysis.hasPausableTrading,
+        hasBlacklist: contractAnalysis.hasBlacklist,
+        volume24h
       };
+
+      await storeTokenAnalysis(token.address, {
+        totalHolders: uniqueHolders,
+        maxHolderPercentage,
+        hasUnlimitedMint: contractAnalysis.hasUnlimitedMint,
+        hasPausableTrading: contractAnalysis.hasPausableTrading,
+        hasBlacklist: contractAnalysis.hasBlacklist,
+        volume24h,
+        isSafe
+      });
+
+      return analysis;
     } catch (error) {
       console.error('Error analyzing token:', error);
       throw error;
