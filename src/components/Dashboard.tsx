@@ -1,13 +1,13 @@
+
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { TokenMonitor } from "@/services/TokenMonitor";
-import { TradingService } from "@/services/TradingService";
-import { AlertCircle, CheckCircle, RefreshCw, Wallet } from "lucide-react";
 import { supabaseService, type Token, type Trade } from "@/services/SupabaseService";
 import { useQuery } from "@tanstack/react-query";
 import { solanaTradeExecutor } from "@/services/SolanaTradeExecutor";
+import { AlertCircle, CheckCircle, RefreshCw, Wallet } from "lucide-react";
 
 export const Dashboard = () => {
   const { toast } = useToast();
