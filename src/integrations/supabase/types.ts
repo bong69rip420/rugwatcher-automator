@@ -122,6 +122,7 @@ export type Database = {
           max_trade_amount: number
           min_liquidity: number
           updated_at: string | null
+          wallet_address: string | null
           wallet_private_key: string | null
         }
         Insert: {
@@ -131,6 +132,7 @@ export type Database = {
           max_trade_amount: number
           min_liquidity: number
           updated_at?: string | null
+          wallet_address?: string | null
           wallet_private_key?: string | null
         }
         Update: {
@@ -140,6 +142,7 @@ export type Database = {
           max_trade_amount?: number
           min_liquidity?: number
           updated_at?: string | null
+          wallet_address?: string | null
           wallet_private_key?: string | null
         }
         Relationships: []

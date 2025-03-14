@@ -56,10 +56,8 @@ export class SolanaTradeExecutor {
       
       // Get wallet configuration from the database
       const config = await configurationService.getTradeConfig();
-      if (config?.wallet_private_key) {
-        jupiterTradeService.setTradingWallet(config.wallet_private_key);
-      } else {
-        console.warn('No trading wallet configured');
+      if (config?.wallet_address) {
+        await configurationService.updateWalletAddress(config.wallet_address);
       }
       
       console.log('Trade executor initialized successfully');
