@@ -1,4 +1,3 @@
-
 import { Connection, PublicKey } from '@solana/web3.js';
 import { Jupiter } from '@jup-ag/core';
 import JSBI from 'jsbi';
@@ -76,9 +75,9 @@ export class JupiterTradeService {
         throw new Error('Swap failed: ' + swapResult.error);
       }
 
-      console.log('Trade executed successfully:', swapResult.txid);
+      console.log('Trade executed successfully:', swapResult.signature);
       
-      return swapResult.txid;
+      return swapResult.signature;
     } catch (error) {
       console.error('Error executing trade:', error);
       throw error;
