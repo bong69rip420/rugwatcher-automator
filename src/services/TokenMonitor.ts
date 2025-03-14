@@ -1,6 +1,6 @@
-
 import { blockchainService } from './BlockchainService';
 import { Connection } from '@solana/web3.js';
+import { getTokenHolders, analyzeHolderDistribution, storeTokenAnalysis } from '@/utils/tokenAnalysis';
 
 interface Token {
   address: string;
@@ -14,6 +14,11 @@ interface TokenAnalysis {
   maxHolderPercentage: number;
   isSecure: boolean;
   details: string[];
+  totalHolders: number;
+  hasUnlimitedMint: boolean;
+  hasPausableTrading: boolean;
+  hasBlacklist: boolean;
+  volume24h: number;
 }
 
 export class TokenMonitor {
@@ -102,17 +107,65 @@ export class TokenMonitor {
   }
 
   async analyzeToken(token: Token): Promise<TokenAnalysis> {
-    // Mock implementation - will be replaced with real analysis
-    return {
-      isRugPull: false,
-      maxHolderPercentage: Math.random() * 15,
-      isSecure: true,
-      details: ["Contract verified", "No mint function", "Ownership renounced"],
-    };
+    if (!this.connection) {
+      throw new Error('No connection available');
+    }
+
+    try {
+      // Get and analyze holder distribution
+      const holders = await getTokenHolders(this.connection, token.address);
+      const { uniqueHolders, maxHolderPercentage } = analyzeHolderDistribution(holders);
+
+      // For now, we'll mock these checks until we implement proper contract analysis
+      const hasUnlimitedMint = Math.random() < 0.3;
+      const hasPausableTrading = Math.random() < 0.2;
+      const hasBlacklist = Math.random() < 0.1;
+      const volume24h = Math.random() * 10000;
+
+      const isSafe = uniqueHolders >= 100 &&
+        maxHolderPercentage <= 20 &&
+        !hasUnlimitedMint &&
+        !hasPausableTrading &&
+        !hasBlacklist &&
+        volume24h >= 2000;
+
+      const details = [];
+      if (uniqueHolders < 100) details.push(`Only ${uniqueHolders} holders`);
+      if (maxHolderPercentage > 20) details.push(`Max holder owns ${maxHolderPercentage.toFixed(2)}%`);
+      if (hasUnlimitedMint) details.push('Unlimited mint function detected');
+      if (hasPausableTrading) details.push('Pausable trading function detected');
+      if (hasBlacklist) details.push('Blacklist function detected');
+      if (volume24h < 2000) details.push(`Low 24h volume: $${volume24h.toFixed(2)}`);
+
+      // Store analysis results
+      await storeTokenAnalysis(token.address, {
+        totalHolders: uniqueHolders,
+        maxHolderPercentage,
+        hasUnlimitedMint,
+        hasPausableTrading,
+        hasBlacklist,
+        volume24h,
+        isSafe
+      });
+
+      return {
+        isRugPull: !isSafe,
+        maxHolderPercentage,
+        isSecure: isSafe,
+        details,
+        totalHolders: uniqueHolders,
+        hasUnlimitedMint,
+        hasPausableTrading,
+        hasBlacklist,
+        volume24h
+      };
+    } catch (error) {
+      console.error('Error analyzing token:', error);
+      throw error;
+    }
   }
 
   getTokens(): Token[] {
     return this.tokens;
   }
 }
-

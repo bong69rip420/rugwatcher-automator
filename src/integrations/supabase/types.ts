@@ -39,6 +39,48 @@ export type Database = {
         }
         Relationships: []
       }
+      token_analysis: {
+        Row: {
+          checked_at: string
+          created_at: string
+          has_blacklist: boolean
+          has_pausable_trading: boolean
+          has_unlimited_mint: boolean
+          id: string
+          is_safe: boolean
+          max_holder_percentage: number
+          token_address: string
+          total_holders: number
+          volume_24h: number
+        }
+        Insert: {
+          checked_at?: string
+          created_at?: string
+          has_blacklist: boolean
+          has_pausable_trading: boolean
+          has_unlimited_mint: boolean
+          id?: string
+          is_safe: boolean
+          max_holder_percentage: number
+          token_address: string
+          total_holders: number
+          volume_24h: number
+        }
+        Update: {
+          checked_at?: string
+          created_at?: string
+          has_blacklist?: boolean
+          has_pausable_trading?: boolean
+          has_unlimited_mint?: boolean
+          id?: string
+          is_safe?: boolean
+          max_holder_percentage?: number
+          token_address?: string
+          total_holders?: number
+          volume_24h?: number
+        }
+        Relationships: []
+      }
       trades: {
         Row: {
           amount: number
@@ -107,6 +149,13 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
+      analysis_check_type:
+        | "holder_count"
+        | "max_holder_percentage"
+        | "unlimited_mint"
+        | "pausable_trading"
+        | "blacklist_function"
+        | "trading_volume"
       trade_status: "pending" | "completed" | "failed"
     }
     CompositeTypes: {
