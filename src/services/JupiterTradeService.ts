@@ -49,8 +49,7 @@ export class JupiterTradeService {
       
       this.jupiter = await Jupiter.load({
         connection,
-        cluster: 'mainnet-beta',
-        commitment: 'confirmed',
+        cluster: 'mainnet-beta'
       });
       
       console.log('Jupiter trade service initialized successfully');
@@ -97,8 +96,7 @@ export class JupiterTradeService {
             outputMint,
             amount: JSBI.BigInt(amount * 1_000_000),
             slippageBps: 100,
-            forceFetch: true,
-            commitment: 'confirmed'
+            forceFetch: true
           });
 
           if (routes.routesInfos.length === 0) {
