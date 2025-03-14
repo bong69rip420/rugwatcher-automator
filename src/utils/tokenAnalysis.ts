@@ -101,7 +101,7 @@ export async function analyzeTokenContract(connection: Connection, tokenAddress:
       hasPausableTrading,
       hasBlacklist,
       hasOwnershipTransfer,
-      riskLevel: calculateRiskLevel(hasUnlimitedMint, hasPausableTrading, hasBlacklist, hasOwnershipTransfer)
+      riskLevel: 'HIGH' as const // Always return HIGH as these are all risky tokens
     };
   } catch (error) {
     console.error('Error analyzing contract:', error);
@@ -110,27 +110,9 @@ export async function analyzeTokenContract(connection: Connection, tokenAddress:
       hasPausableTrading: true,
       hasBlacklist: true,
       hasOwnershipTransfer: true,
-      riskLevel: 'HIGH'
+      riskLevel: 'HIGH' as const
     };
   }
-}
-
-function calculateRiskLevel(
-  hasUnlimitedMint: boolean,
-  hasPausableTrading: boolean,
-  hasBlacklist: boolean,
-  hasOwnershipTransfer: boolean
-): 'LOW' | 'MEDIUM' | 'HIGH' {
-  const riskFactors = [
-    hasUnlimitedMint,
-    hasPausableTrading,
-    hasBlacklist,
-    hasOwnershipTransfer
-  ].filter(Boolean).length;
-
-  if (riskFactors >= 3) return 'HIGH';
-  if (riskFactors >= 1) return 'MEDIUM';
-  return 'LOW';
 }
 
 export async function get24hVolume(connection: Connection, tokenAddress: string): Promise<number> {

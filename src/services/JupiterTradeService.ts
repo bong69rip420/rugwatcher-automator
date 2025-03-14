@@ -1,6 +1,7 @@
 
 import { Connection, PublicKey } from '@solana/web3.js';
 import { Jupiter } from '@jup-ag/core';
+import JSBI from 'jsbi';
 import { configurationService } from './ConfigurationService';
 
 export class JupiterTradeService {
@@ -24,7 +25,6 @@ export class JupiterTradeService {
     this.jupiter = await Jupiter.load({
       connection,
       cluster: 'mainnet-beta',
-      defaultSlippageBps: 100, // 1% slippage
     });
     
     console.log('Jupiter trade service initialized');
@@ -47,7 +47,7 @@ export class JupiterTradeService {
       const routes = await this.jupiter.computeRoutes({
         inputMint,
         outputMint,
-        amount: amount * 1_000_000, // Convert to USDC decimals
+        amount: JSBI.BigInt(amount * 1_000_000), // Convert to USDC decimals
         slippageBps: 100,
         forceFetch: true
       });
@@ -65,12 +65,12 @@ export class JupiterTradeService {
       });
 
       // Execute the exchange
-      const { transactions } = await this.jupiter.exchange({
+      const result = await this.jupiter.exchange({
         routeInfo: bestRoute
       });
 
       // Execute the transaction
-      const txid = await transactions.execute();
+      const txid = await result.execute();
       console.log('Trade executed successfully:', txid);
       
       return txid;
