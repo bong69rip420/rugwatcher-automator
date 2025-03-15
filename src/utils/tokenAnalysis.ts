@@ -6,31 +6,50 @@ export interface TokenHolder {
   amount: number;
 }
 
-export async function getTokenHolders(connection: Connection, tokenAddress: string): Promise<TokenHolder[]> {
-  try {
-    const tokenProgramId = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
-    const accounts = await connection.getProgramAccounts(tokenProgramId, {
-      filters: [
-        {
-          dataSize: 165,
-        },
-        {
-          memcmp: {
-            offset: 0,
-            bytes: tokenAddress,
-          },
-        },
-      ],
-    });
+// Rate limiting utility
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-    return accounts.map(account => ({
-      address: account.pubkey.toString(),
-      amount: Number(account.account.data.readBigInt64LE(64)),
-    }));
-  } catch (error) {
-    console.error('Error fetching token holders:', error);
-    return [];
+export async function getTokenHolders(connection: Connection, tokenAddress: string): Promise<TokenHolder[]> {
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY = 2000; // 2 seconds between retries
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      if (attempt > 0) {
+        console.log(`Retry attempt ${attempt + 1} for getTokenHolders...`);
+        await sleep(RETRY_DELAY);
+      }
+
+      const tokenProgramId = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+      const accounts = await connection.getProgramAccounts(tokenProgramId, {
+        filters: [
+          {
+            dataSize: 165,
+          },
+          {
+            memcmp: {
+              offset: 0,
+              bytes: tokenAddress,
+            },
+          },
+        ],
+        commitment: 'confirmed',
+      });
+
+      return accounts.map(account => ({
+        address: account.pubkey.toString(),
+        amount: Number(account.account.data.readBigInt64LE(64)),
+      }));
+    } catch (error) {
+      console.error(`Attempt ${attempt + 1} failed:`, error);
+      if (attempt === MAX_RETRIES - 1) {
+        console.error('Max retries reached for getTokenHolders');
+        return [];
+      }
+    }
   }
+
+  return [];
 }
 
 export function analyzeHolderDistribution(holders: TokenHolder[]): {
