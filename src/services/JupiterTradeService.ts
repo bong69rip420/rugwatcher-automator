@@ -97,32 +97,30 @@ export class JupiterTradeService {
         throw new Error('Private key must be a non-empty string');
       }
 
-      // Validate base58 format before decoding
+      console.log('Starting wallet setup with private key length:', privateKey.length);
+
+      // Check if key matches expected base58 format
       if (!/^[1-9A-HJ-NP-Za-km-z]+$/.test(privateKey)) {
-        throw new Error('Private key must be in valid base58 format (only letters and numbers)');
+        throw new Error('Private key contains invalid characters. Must be base58 format.');
       }
 
-      // Decode the private key
-      let secretKey: Uint8Array;
-      try {
-        secretKey = bs58.decode(privateKey);
-        
-        // Verify the decoded key is exactly 64 bytes
-        if (secretKey.length !== 64) {
-          throw new Error(`Invalid decoded key length: ${secretKey.length}. Expected 64 bytes.`);
-        }
+      // Decode private key
+      const secretKey = bs58.decode(privateKey);
+      console.log('Decoded key to byte array of length:', secretKey.length);
 
-        // Create the Solana Keypair
+      if (secretKey.length !== 64) {
+        throw new Error(`Invalid decoded key length: ${secretKey.length}. Expected 64 bytes.`);
+      }
+
+      // Create keypair
+      try {
         this.tradingWallet = Keypair.fromSecretKey(secretKey);
-        
-        // Verify the keypair was created successfully by attempting to get its public key
         const publicKey = this.tradingWallet.publicKey.toString();
-        console.log('Successfully created Keypair with public key:', publicKey);
-        
+        console.log('Successfully created Solana keypair with public key:', publicKey);
         return publicKey;
       } catch (error) {
         console.error('Error creating Solana keypair:', error);
-        throw new Error('Failed to create valid Solana keypair from the provided private key. Please ensure you are using a valid Solana private key in base58 format.');
+        throw new Error('Failed to create Solana keypair. The decoded private key may be invalid.');
       }
     } catch (error) {
       console.error('Error in setTradingWallet:', error);
