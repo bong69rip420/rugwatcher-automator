@@ -2,7 +2,6 @@ import { Connection, PublicKey, Keypair, VersionedTransaction } from '@solana/we
 import JSBI from 'jsbi';
 import { configurationService } from './ConfigurationService';
 import bs58 from 'bs58';
-import { Buffer } from 'buffer';
 
 // Jupiter types
 type QuoteResponse = {
@@ -120,10 +119,9 @@ export class JupiterTradeService {
         throw new Error('Failed to decode private key from base58 format');
       }
 
-      // Try to create the keypair
+      // Try to create the keypair directly from the Uint8Array
       try {
-        const secretKeyBuffer = Buffer.from(secretKey);
-        this.tradingWallet = Keypair.fromSecretKey(secretKeyBuffer);
+        this.tradingWallet = Keypair.fromSecretKey(secretKey);
         console.log('Successfully created Keypair. Public key:', this.tradingWallet.publicKey.toString());
       } catch (keypairError) {
         console.error('Error creating Keypair:', keypairError);
