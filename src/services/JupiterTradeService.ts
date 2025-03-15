@@ -97,43 +97,36 @@ export class JupiterTradeService {
         throw new Error('Private key must be a non-empty string');
       }
 
-      // Validate base58 format
+      // Validate base58 format before decoding
       if (!/^[1-9A-HJ-NP-Za-km-z]+$/.test(privateKey)) {
-        throw new Error('Private key contains invalid characters. Must be base58 format.');
+        throw new Error('Private key must be in valid base58 format (only letters and numbers)');
       }
 
-      // Log key length for debugging
-      console.log('Private key length:', privateKey.length);
-
-      // Try to decode the private key
+      // Decode the private key
       let secretKey: Uint8Array;
       try {
         secretKey = bs58.decode(privateKey);
-        console.log('Decoded key length:', secretKey.length);
         
+        // Verify the decoded key is exactly 64 bytes
         if (secretKey.length !== 64) {
           throw new Error(`Invalid decoded key length: ${secretKey.length}. Expected 64 bytes.`);
         }
-      } catch (decodeError) {
-        console.error('Error decoding private key:', decodeError);
-        throw new Error('Failed to decode private key from base58 format');
-      }
 
-      // Try to create the keypair directly from the Uint8Array
-      try {
+        // Create the Solana Keypair
         this.tradingWallet = Keypair.fromSecretKey(secretKey);
-        console.log('Successfully created Keypair. Public key:', this.tradingWallet.publicKey.toString());
-      } catch (keypairError) {
-        console.error('Error creating Keypair:', keypairError);
-        throw new Error('Invalid secret key format for Solana keypair');
+        
+        // Verify the keypair was created successfully by attempting to get its public key
+        const publicKey = this.tradingWallet.publicKey.toString();
+        console.log('Successfully created Keypair with public key:', publicKey);
+        
+        return publicKey;
+      } catch (error) {
+        console.error('Error creating Solana keypair:', error);
+        throw new Error('Failed to create valid Solana keypair from the provided private key. Please ensure you are using a valid Solana private key in base58 format.');
       }
     } catch (error) {
-      console.error('Error setting trading wallet:', error);
-      throw new Error(
-        'Invalid wallet private key format. The private key should be in base58 format ' +
-        '(approximately 87-88 characters, containing only letters and numbers). ' +
-        'Please check your private key value in Supabase secrets.'
-      );
+      console.error('Error in setTradingWallet:', error);
+      throw error;
     }
   }
 
