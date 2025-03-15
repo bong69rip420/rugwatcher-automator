@@ -93,8 +93,14 @@ export class JupiterTradeService {
 
   setTradingWallet(privateKey: string) {
     try {
-      const decodedKey = new Uint8Array(Buffer.from(privateKey, 'base64'));
-      this.tradingWallet = Keypair.fromSecretKey(decodedKey);
+      // Convert base64 string to Uint8Array using browser-compatible method
+      const binaryString = atob(privateKey);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      
+      this.tradingWallet = Keypair.fromSecretKey(bytes);
       console.log('Trading wallet set successfully');
     } catch (error) {
       console.error('Error setting trading wallet:', error);
