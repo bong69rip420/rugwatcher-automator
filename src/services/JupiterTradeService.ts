@@ -97,30 +97,45 @@ export class JupiterTradeService {
         throw new Error('Private key must be a non-empty string');
       }
 
-      console.log('Starting wallet setup with private key length:', privateKey.length);
+      console.log('Starting wallet setup with raw key hash:', privateKey.slice(0, 4) + '...' + privateKey.slice(-4));
+      console.log('Key length:', privateKey.length);
 
-      // Check if key matches expected base58 format
-      if (!/^[1-9A-HJ-NP-Za-km-z]+$/.test(privateKey)) {
-        throw new Error('Private key contains invalid characters. Must be base58 format.');
+      // Check base58 format
+      if (!/^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]+$/.test(privateKey)) {
+        throw new Error('Private key contains invalid Base58 characters');
       }
 
       // Decode private key
+      console.log('Decoding Base58 key...');
       const secretKey = bs58.decode(privateKey);
-      console.log('Decoded key to byte array of length:', secretKey.length);
+      console.log('Decoded key length:', secretKey.length, 'bytes');
+      console.log('First 4 bytes:', Array.from(secretKey.slice(0, 4)));
 
       if (secretKey.length !== 64) {
         throw new Error(`Invalid decoded key length: ${secretKey.length}. Expected 64 bytes.`);
       }
 
-      // Create keypair
+      // Verify key only contains valid bytes (0-255)
+      const invalidBytes = Array.from(secretKey).filter(byte => byte < 0 || byte > 255);
+      if (invalidBytes.length > 0) {
+        throw new Error('Decoded key contains invalid byte values');
+      }
+
+      console.log('Key validation passed, creating Keypair...');
+      
+      // Create keypair with additional error context
       try {
         this.tradingWallet = Keypair.fromSecretKey(secretKey);
         const publicKey = this.tradingWallet.publicKey.toString();
-        console.log('Successfully created Solana keypair with public key:', publicKey);
+        console.log('Successfully created Solana keypair!');
+        console.log('Public key:', publicKey);
         return publicKey;
       } catch (error) {
-        console.error('Error creating Solana keypair:', error);
-        throw new Error('Failed to create Solana keypair. The decoded private key may be invalid.');
+        console.error('Keypair creation error details:', error);
+        throw new Error(
+          'Failed to create Solana keypair. This usually means the key bytes are not a valid Ed25519 private key. ' +
+          'Please ensure you are using a valid Solana private key.'
+        );
       }
     } catch (error) {
       console.error('Error in setTradingWallet:', error);
