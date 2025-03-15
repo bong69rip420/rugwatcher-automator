@@ -23,19 +23,21 @@ export interface Trade {
 export class SupabaseService {
   async getMonitoredTokens(): Promise<Token[]> {
     try {
+      console.log('Fetching monitored tokens from Supabase...');
       const { data, error } = await supabase
         .from('monitored_tokens')
         .select('*')
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Error fetching tokens:', error);
+        console.error('Error fetching tokens:', error.message, error.details);
         return [];
       }
 
+      console.log('Successfully fetched tokens:', data?.length || 0, 'tokens');
       return data || [];
     } catch (error) {
-      console.error('Error in getMonitoredTokens:', error);
+      console.error('Unexpected error in getMonitoredTokens:', error);
       return [];
     }
   }
@@ -62,20 +64,29 @@ export class SupabaseService {
   async addToken(token: Omit<Token, 'id' | 'created_at' | 'is_active'>): Promise<Token | null> {
     try {
       console.log('Adding token to database:', token);
+      
+      const tokenData = {
+        address: token.address,
+        name: token.name,
+        symbol: token.symbol,
+        is_active: true
+      };
+
       const { data, error } = await supabase
         .from('monitored_tokens')
-        .insert([token])
+        .insert([tokenData])
         .select()
         .single();
 
       if (error) {
-        console.error('Error adding token:', error);
+        console.error('Error adding token:', error.message, error.details);
         return null;
       }
 
+      console.log('Successfully added token:', data);
       return data;
     } catch (error) {
-      console.error('Error in addToken:', error);
+      console.error('Unexpected error in addToken:', error);
       return null;
     }
   }
