@@ -93,12 +93,20 @@ export class JupiterTradeService {
 
   setTradingWallet(privateKey: string) {
     try {
+      if (!privateKey || typeof privateKey !== 'string') {
+        throw new Error('Private key must be a non-empty string');
+      }
+
       const secretKey = bs58.decode(privateKey);
       this.tradingWallet = Keypair.fromSecretKey(secretKey);
       console.log('Trading wallet set successfully');
     } catch (error) {
       console.error('Error setting trading wallet:', error);
-      throw new Error('Invalid wallet private key format');
+      throw new Error(
+        'Invalid wallet private key format. The private key should be in base58 format ' +
+        '(approximately 87-88 characters, containing only letters and numbers). ' +
+        'Please check your private key value in Supabase secrets.'
+      );
     }
   }
 
