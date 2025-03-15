@@ -1,3 +1,4 @@
+
 import { Connection, PublicKey, Keypair, VersionedTransaction } from '@solana/web3.js';
 import JSBI from 'jsbi';
 import { configurationService } from './ConfigurationService';
@@ -97,9 +98,36 @@ export class JupiterTradeService {
         throw new Error('Private key must be a non-empty string');
       }
 
-      const secretKey = bs58.decode(privateKey);
-      this.tradingWallet = Keypair.fromSecretKey(secretKey);
-      console.log('Trading wallet set successfully');
+      // Validate base58 format
+      if (!/^[1-9A-HJ-NP-Za-km-z]+$/.test(privateKey)) {
+        throw new Error('Private key contains invalid characters. Must be base58 format.');
+      }
+
+      // Log key length for debugging
+      console.log('Private key length:', privateKey.length);
+
+      // Try to decode the private key
+      let secretKey: Uint8Array;
+      try {
+        secretKey = bs58.decode(privateKey);
+        console.log('Decoded key length:', secretKey.length);
+        
+        if (secretKey.length !== 64) {
+          throw new Error(`Invalid decoded key length: ${secretKey.length}. Expected 64 bytes.`);
+        }
+      } catch (decodeError) {
+        console.error('Error decoding private key:', decodeError);
+        throw new Error('Failed to decode private key from base58 format');
+      }
+
+      // Try to create the keypair
+      try {
+        this.tradingWallet = Keypair.fromSecretKey(secretKey);
+        console.log('Successfully created Keypair. Public key:', this.tradingWallet.publicKey.toString());
+      } catch (keypairError) {
+        console.error('Error creating Keypair:', keypairError);
+        throw new Error('Invalid secret key format for Solana keypair');
+      }
     } catch (error) {
       console.error('Error setting trading wallet:', error);
       throw new Error(
