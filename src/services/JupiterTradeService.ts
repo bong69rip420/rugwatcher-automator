@@ -91,6 +91,16 @@ export class JupiterTradeService {
     }
   }
 
+  static generateTestKeypair(): { publicKey: string, privateKey: string } {
+    const keypair = Keypair.generate();
+    const publicKey = keypair.publicKey.toString();
+    const privateKey = bs58.encode(keypair.secretKey);
+    console.log('Generated test keypair:');
+    console.log('Public key:', publicKey);
+    console.log('Private key:', privateKey);
+    return { publicKey, privateKey };
+  }
+
   setTradingWallet(privateKey: string) {
     try {
       if (!privateKey || typeof privateKey !== 'string') {
@@ -115,31 +125,23 @@ export class JupiterTradeService {
         throw new Error(`Invalid decoded key length: ${secretKey.length}. Expected 64 bytes.`);
       }
 
-      // Verify key only contains valid bytes (0-255)
-      const invalidBytes = Array.from(secretKey).filter(byte => byte < 0 || byte > 255);
-      if (invalidBytes.length > 0) {
-        throw new Error('Decoded key contains invalid byte values');
-      }
-
-      console.log('Key validation passed, creating Keypair...');
+      const newKeypair = Keypair.fromSecretKey(secretKey);
+      console.log('Successfully created Solana keypair!');
+      const publicKey = newKeypair.publicKey.toString();
+      console.log('Public key:', publicKey);
       
-      // Create keypair with additional error context
-      try {
-        this.tradingWallet = Keypair.fromSecretKey(secretKey);
-        const publicKey = this.tradingWallet.publicKey.toString();
-        console.log('Successfully created Solana keypair!');
-        console.log('Public key:', publicKey);
-        return publicKey;
-      } catch (error) {
-        console.error('Keypair creation error details:', error);
-        throw new Error(
-          'Failed to create Solana keypair. This usually means the key bytes are not a valid Ed25519 private key. ' +
-          'Please ensure you are using a valid Solana private key.'
-        );
-      }
+      // Only set the trading wallet if the keypair was created successfully
+      this.tradingWallet = newKeypair;
+      return publicKey;
     } catch (error) {
       console.error('Error in setTradingWallet:', error);
-      throw error;
+      
+      // Generate a valid test keypair to show what a working key looks like
+      const testKeypair = JupiterTradeService.generateTestKeypair();
+      throw new Error(
+        'Failed to create Solana keypair. For testing, you can use this valid private key: ' + 
+        testKeypair.privateKey
+      );
     }
   }
 
