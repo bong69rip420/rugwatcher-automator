@@ -1,9 +1,10 @@
-
 export interface Token {
+  id?: string;
   address: string;
   name: string;
   symbol: string;
-  timestamp: number;
+  is_active?: boolean;
+  created_at?: string;
 }
 
 export interface TokenAnalysis {

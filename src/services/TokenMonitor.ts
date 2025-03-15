@@ -1,4 +1,3 @@
-
 import { blockchainService } from './BlockchainService';
 import { Connection } from '@solana/web3.js';
 import { Token } from '@/types/token';
@@ -86,8 +85,8 @@ export class TokenMonitor {
         address: "0x" + Math.random().toString(16).slice(2, 42),
         name: "Test Token " + new Date().toLocaleTimeString(),
         symbol: "TEST" + Math.floor(Math.random() * 1000),
-        created_at: new Date().toISOString(),
         is_active: true,
+        created_at: new Date().toISOString(),
       };
 
       // Save token to database
