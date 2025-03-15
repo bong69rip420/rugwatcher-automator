@@ -92,13 +92,25 @@ export class JupiterTradeService {
   }
 
   static generateTestKeypair(): { publicKey: string, privateKey: string } {
-    const keypair = Keypair.generate();
-    const publicKey = keypair.publicKey.toString();
-    const privateKey = bs58.encode(keypair.secretKey);
-    console.log('Generated test keypair:');
-    console.log('Public key:', publicKey);
-    console.log('Private key:', privateKey);
-    return { publicKey, privateKey };
+    try {
+      const keypair = Keypair.generate();
+      const publicKey = keypair.publicKey.toString();
+      const privateKey = bs58.encode(keypair.secretKey);
+      console.log('Generated test keypair:');
+      console.log('Public key:', publicKey);
+      console.log('Private key:', privateKey);
+
+      // Verify the generated keypair can be decoded back
+      const decoded = bs58.decode(privateKey);
+      console.log('Test key validation - decoded length:', decoded.length);
+      const verifyKeypair = Keypair.fromSecretKey(decoded);
+      console.log('Test key validation - successfully created verification keypair');
+
+      return { publicKey, privateKey };
+    } catch (error) {
+      console.error('Error generating test keypair:', error);
+      throw error;
+    }
   }
 
   setTradingWallet(privateKey: string) {
@@ -110,12 +122,7 @@ export class JupiterTradeService {
       console.log('Starting wallet setup with raw key hash:', privateKey.slice(0, 4) + '...' + privateKey.slice(-4));
       console.log('Key length:', privateKey.length);
 
-      // Check base58 format
-      if (!/^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]+$/.test(privateKey)) {
-        throw new Error('Private key contains invalid Base58 characters');
-      }
-
-      // Decode private key
+      // Decode private key with detailed logging
       console.log('Decoding Base58 key...');
       const secretKey = bs58.decode(privateKey);
       console.log('Decoded key length:', secretKey.length, 'bytes');
@@ -125,23 +132,30 @@ export class JupiterTradeService {
         throw new Error(`Invalid decoded key length: ${secretKey.length}. Expected 64 bytes.`);
       }
 
-      const newKeypair = Keypair.fromSecretKey(secretKey);
-      console.log('Successfully created Solana keypair!');
-      const publicKey = newKeypair.publicKey.toString();
-      console.log('Public key:', publicKey);
-      
-      // Only set the trading wallet if the keypair was created successfully
-      this.tradingWallet = newKeypair;
-      return publicKey;
+      // Try creating the keypair
+      try {
+        const newKeypair = Keypair.fromSecretKey(secretKey);
+        console.log('Successfully created Solana keypair!');
+        const publicKey = newKeypair.publicKey.toString();
+        console.log('Public key:', publicKey);
+        
+        this.tradingWallet = newKeypair;
+        return publicKey;
+      } catch (error) {
+        console.error('Error creating keypair:', error);
+        
+        // Generate a test keypair to show a working example
+        console.log('Generating a test keypair for reference...');
+        const testKeypair = JupiterTradeService.generateTestKeypair();
+        
+        throw new Error(
+          'Failed to create Solana keypair. For testing, you can use this valid private key: ' + 
+          testKeypair.privateKey
+        );
+      }
     } catch (error) {
       console.error('Error in setTradingWallet:', error);
-      
-      // Generate a valid test keypair to show what a working key looks like
-      const testKeypair = JupiterTradeService.generateTestKeypair();
-      throw new Error(
-        'Failed to create Solana keypair. For testing, you can use this valid private key: ' + 
-        testKeypair.privateKey
-      );
+      throw error;
     }
   }
 
