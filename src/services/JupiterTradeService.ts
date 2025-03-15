@@ -1,18 +1,27 @@
 
 import { Connection, PublicKey, Keypair, VersionedTransaction } from '@solana/web3.js';
-import { Jupiter } from '@jup-ag/core';
 import JSBI from 'jsbi';
 import { configurationService } from './ConfigurationService';
+
+// Jupiter types
+type QuoteResponse = {
+  inAmount: string;
+  outAmount: string;
+  outAmountWithSlippage: string;
+  priceImpactPct: number;
+  marketInfos: any[];
+  swapTransaction: string;
+};
 
 export class JupiterTradeService {
   private static instance: JupiterTradeService;
   private connection: Connection | null = null;
-  private jupiter: Jupiter | null = null;
   private tradingWallet: Keypair | null = null;
   private isInitializing = false;
   private initPromise: Promise<void> | null = null;
   private lastRequestTime = 0;
   private readonly MIN_REQUEST_INTERVAL = 1000; // 1 second between requests
+  private readonly JUPITER_API_URL = 'https://quote-api.jup.ag/v6';
 
   private constructor() {}
 
@@ -34,13 +43,13 @@ export class JupiterTradeService {
 
   async initialize(connection: Connection) {
     if (this.initPromise) {
-      console.log('Waiting for existing Jupiter initialization to complete');
+      console.log('Waiting for existing initialization to complete');
       await this.initPromise;
       return;
     }
 
-    if (this.jupiter && this.connection === connection) {
-      console.log('Jupiter already initialized with the same connection');
+    if (this.connection === connection) {
+      console.log('Already initialized with the same connection');
       return;
     }
 
@@ -54,32 +63,12 @@ export class JupiterTradeService {
 
   private async _initialize(connection: Connection) {
     try {
-      if (this.isInitializing) {
-        console.log('Already initializing, skipping redundant initialization');
-        return;
-      }
-
       this.isInitializing = true;
-      console.log('Starting Jupiter initialization');
-      
-      if (this.jupiter) {
-        console.log('Cleaning up existing Jupiter instance');
-        this.jupiter = null;
-        this.connection = null;
-      }
-
+      console.log('Starting initialization');
       this.connection = connection;
-      
-      await this.waitForRequestWindow();
-      this.jupiter = await Jupiter.load({
-        connection,
-        cluster: 'mainnet-beta'
-      });
-      
-      console.log('Jupiter trade service initialized successfully');
+      console.log('Initialized successfully');
     } catch (error) {
-      console.error('Error initializing Jupiter:', error);
-      this.jupiter = null;
+      console.error('Error initializing:', error);
       this.connection = null;
       throw error;
     } finally {
@@ -113,8 +102,23 @@ export class JupiterTradeService {
     }
   }
 
+  private async fetchQuote(inputMint: string, outputMint: string, amount: number): Promise<QuoteResponse> {
+    const params = new URLSearchParams({
+      inputMint,
+      outputMint,
+      amount: (amount * 1_000_000).toString(),
+      slippageBps: '100',
+    });
+
+    const response = await fetch(`${this.JUPITER_API_URL}/quote?${params}`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch quote from Jupiter');
+    }
+    return response.json();
+  }
+
   async executePurchase(tokenAddress: string, amount: number): Promise<string> {
-    if (!this.connection || !this.jupiter || !this.tradingWallet) {
+    if (!this.connection || !this.tradingWallet) {
       throw new Error('Trade service not initialized or wallet not set');
     }
 
@@ -129,54 +133,49 @@ export class JupiterTradeService {
           const config = await configurationService.getTradeConfig();
           console.log('Using trade config:', config);
 
-          const inputMint = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v');
-          const outputMint = new PublicKey(tokenAddress);
+          const inputMint = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'; // USDC mint
+          const outputMint = tokenAddress;
+
+          const quote = await this.fetchQuote(inputMint, outputMint, amount);
+          console.log('Received quote:', quote);
 
           await this.waitForRequestWindow();
-          const routes = await this.jupiter.computeRoutes({
-            inputMint,
-            outputMint,
-            amount: JSBI.BigInt(amount * 1_000_000),
-            slippageBps: 100,
-            forceFetch: true
+          const response = await fetch(`${this.JUPITER_API_URL}/swap`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              quoteResponse: quote,
+              userPublicKey: this.tradingWallet.publicKey.toString(),
+              wrapUnwrapSOL: true,
+            }),
           });
 
-          if (routes.routesInfos.length === 0) {
-            throw new Error('No routes found for trade');
+          if (!response.ok) {
+            throw new Error('Failed to create swap transaction');
           }
 
-          const bestRoute = routes.routesInfos[0];
-          console.log('Selected route:', {
-            inAmount: bestRoute.inAmount,
-            outAmount: bestRoute.outAmount,
-            priceImpactPct: bestRoute.priceImpactPct,
-          });
+          const { swapTransaction } = await response.json();
+          const transaction = VersionedTransaction.deserialize(
+            Buffer.from(swapTransaction, 'base64')
+          );
 
+          transaction.sign([this.tradingWallet]);
+          
           await this.waitForRequestWindow();
-          const { swapTransaction } = await this.jupiter.exchange({
-            routeInfo: bestRoute,
-            userPublicKey: this.tradingWallet.publicKey,
-          });
-
-          if (swapTransaction instanceof VersionedTransaction) {
-            swapTransaction.sign([this.tradingWallet]);
-            
-            await this.waitForRequestWindow();
-            const signature = await this.connection.sendRawTransaction(swapTransaction.serialize(), {
+          const signature = await this.connection.sendRawTransaction(
+            transaction.serialize(),
+            {
               skipPreflight: false,
               preflightCommitment: 'confirmed',
               maxRetries: 3,
-            });
-            
-            console.log('Trade executed successfully:', signature);
-            return signature;
-          } else {
-            throw new Error('Expected VersionedTransaction but received different transaction type');
-          }
+            }
+          );
+          
+          console.log('Trade executed successfully:', signature);
+          return signature;
         } catch (error) {
           console.error(`Attempt ${i + 1} failed:`, error);
           lastError = error;
-          // Add delay between retries
           await new Promise(resolve => setTimeout(resolve, 2000));
           continue;
         }
