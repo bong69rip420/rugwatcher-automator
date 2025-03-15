@@ -1,8 +1,8 @@
-
 import { Connection, PublicKey, Keypair, VersionedTransaction } from '@solana/web3.js';
 import JSBI from 'jsbi';
 import { configurationService } from './ConfigurationService';
 import bs58 from 'bs58';
+import { Buffer } from 'buffer';
 
 // Jupiter types
 type QuoteResponse = {
@@ -122,7 +122,8 @@ export class JupiterTradeService {
 
       // Try to create the keypair
       try {
-        this.tradingWallet = Keypair.fromSecretKey(secretKey);
+        const secretKeyBuffer = Buffer.from(secretKey);
+        this.tradingWallet = Keypair.fromSecretKey(secretKeyBuffer);
         console.log('Successfully created Keypair. Public key:', this.tradingWallet.publicKey.toString());
       } catch (keypairError) {
         console.error('Error creating Keypair:', keypairError);
