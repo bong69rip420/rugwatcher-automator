@@ -1,8 +1,10 @@
+
 import { blockchainService } from './BlockchainService';
 import { Connection } from '@solana/web3.js';
 import { Token } from '@/types/token';
 import { SolanaTradeExecutor } from './SolanaTradeExecutor';
 import { TokenAnalyzer } from './TokenAnalyzer';
+import { supabaseService } from './SupabaseService';
 
 export class TokenMonitor {
   private static instance: TokenMonitor;
@@ -12,6 +14,8 @@ export class TokenMonitor {
   private connection: Connection | null = null;
   private tokenAnalyzer: TokenAnalyzer | null = null;
   private tradeExecutor: SolanaTradeExecutor | null = null;
+  private lastCheckTime: number = 0;
+  private readonly CHECK_INTERVAL = 3 * 60 * 1000; // 3 minutes
 
   private constructor() {}
 
@@ -45,11 +49,12 @@ export class TokenMonitor {
       const tokenProgramId = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
       console.log('Monitoring token program:', tokenProgramId);
 
+      // Start immediate check and set interval
+      this.checkNewTokens();
       this.intervalId = setInterval(() => {
         this.checkNewTokens();
-      }, 3 * 60 * 1000); // 3 minutes
+      }, this.CHECK_INTERVAL);
 
-      this.checkNewTokens();
     } catch (error) {
       console.error('Error starting token monitor:', error);
     }
@@ -73,39 +78,54 @@ export class TokenMonitor {
     }
 
     try {
-      const signature = await this.connection.getRecentBlockhash();
-      console.log('Checking new tokens in block:', signature.blockhash);
+      const now = Date.now();
+      console.log('Checking new tokens, last check:', new Date(this.lastCheckTime).toISOString());
 
-      // Mock token for testing - will be replaced with real token detection
+      // For testing purposes, create a mock new token with timestamp
       const mockNewToken: Token = {
         address: "0x" + Math.random().toString(16).slice(2, 42),
-        name: "New Token " + Date.now(),
-        symbol: "NT" + Math.floor(Math.random() * 1000),
-        timestamp: Date.now(),
+        name: "Test Token " + new Date().toLocaleTimeString(),
+        symbol: "TEST" + Math.floor(Math.random() * 1000),
+        created_at: new Date().toISOString(),
+        is_active: true,
       };
 
-      // Check if token is less than 48 hours old
-      const tokenAge = Date.now() - mockNewToken.timestamp;
-      const MAX_AGE = 48 * 60 * 60 * 1000; // 48 hours in milliseconds
+      // Save token to database
+      const savedToken = await supabaseService.addToken({
+        address: mockNewToken.address,
+        name: mockNewToken.name,
+        symbol: mockNewToken.symbol,
+      });
 
-      if (tokenAge > MAX_AGE) {
-        console.log('Token too old, skipping:', mockNewToken.symbol);
-        return;
+      if (savedToken) {
+        console.log('New token saved to database:', savedToken);
+        this.tokens.push(savedToken);
+        
+        if (this.onNewToken) {
+          this.onNewToken(savedToken);
+        }
+
+        // Analyze token and execute trade if safe
+        const analysis = await this.tokenAnalyzer.analyzeToken(savedToken);
+        if (analysis.isSecure) {
+          console.log('Token analysis shows token is secure, executing trade');
+          const txHash = await this.tradeExecutor.executePurchase(savedToken.address, 0.1);
+          console.log('Trade executed successfully:', txHash);
+
+          // Save the trade to database
+          await supabaseService.addTrade({
+            token_address: savedToken.address,
+            amount: 0.1,
+            price: null,
+            status: 'completed',
+            transaction_hash: txHash,
+          });
+        } else {
+          console.log('Token analysis shows token is not secure:', analysis.details);
+        }
       }
 
-      this.tokens.push(mockNewToken);
-      console.log('New token detected:', mockNewToken);
-      
-      if (this.onNewToken) {
-        this.onNewToken(mockNewToken);
-      }
-
-      // Analyze token and execute trade if safe
-      const analysis = await this.tokenAnalyzer.analyzeToken(mockNewToken);
-      if (analysis.isSecure) {
-        const txHash = await this.tradeExecutor.executePurchase(mockNewToken.address, 0.1);
-        console.log('Trade executed successfully:', txHash);
-      }
+      this.lastCheckTime = now;
     } catch (error) {
       console.error("Error checking new tokens:", error);
     }
