@@ -1,7 +1,7 @@
-
 import { Connection, PublicKey, Keypair, VersionedTransaction } from '@solana/web3.js';
 import JSBI from 'jsbi';
 import { configurationService } from './ConfigurationService';
+import bs58 from 'bs58';
 
 // Jupiter types
 type QuoteResponse = {
@@ -93,14 +93,8 @@ export class JupiterTradeService {
 
   setTradingWallet(privateKey: string) {
     try {
-      // Convert base64 string to Uint8Array using browser-compatible method
-      const binaryString = atob(privateKey);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      
-      this.tradingWallet = Keypair.fromSecretKey(bytes);
+      const secretKey = bs58.decode(privateKey);
+      this.tradingWallet = Keypair.fromSecretKey(secretKey);
       console.log('Trading wallet set successfully');
     } catch (error) {
       console.error('Error setting trading wallet:', error);
