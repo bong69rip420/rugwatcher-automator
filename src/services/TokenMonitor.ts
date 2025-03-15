@@ -1,3 +1,4 @@
+
 import { blockchainService } from './BlockchainService';
 import { Connection } from '@solana/web3.js';
 import { Token } from '@/types/token';
@@ -49,7 +50,7 @@ export class TokenMonitor {
       console.log('Monitoring token program:', tokenProgramId);
 
       // Start immediate check and set interval
-      this.checkNewTokens();
+      await this.checkNewTokens();
       this.intervalId = setInterval(() => {
         this.checkNewTokens();
       }, this.CHECK_INTERVAL);
@@ -80,8 +81,8 @@ export class TokenMonitor {
       const now = Date.now();
       console.log('Checking new tokens, last check:', new Date(this.lastCheckTime).toISOString());
 
-      // For testing purposes, create a mock new token with timestamp
-      const mockNewToken: Token = {
+      // For testing purposes, create a mock new token
+      const mockNewToken: Omit<Token, 'id'> = {
         address: "0x" + Math.random().toString(16).slice(2, 42),
         name: "Test Token " + new Date().toLocaleTimeString(),
         symbol: "TEST" + Math.floor(Math.random() * 1000),
@@ -89,39 +90,43 @@ export class TokenMonitor {
         created_at: new Date().toISOString(),
       };
 
-      // Save token to database
-      const savedToken = await supabaseService.addToken({
-        address: mockNewToken.address,
-        name: mockNewToken.name,
-        symbol: mockNewToken.symbol,
-      });
+      try {
+        // Save token to database
+        const savedToken = await supabaseService.addToken({
+          address: mockNewToken.address,
+          name: mockNewToken.name,
+          symbol: mockNewToken.symbol,
+        });
 
-      if (savedToken) {
-        console.log('New token saved to database:', savedToken);
-        this.tokens.push(savedToken);
-        
-        if (this.onNewToken) {
-          this.onNewToken(savedToken);
+        if (savedToken) {
+          console.log('New token saved to database:', savedToken);
+          this.tokens.push(savedToken);
+          
+          if (this.onNewToken) {
+            this.onNewToken(savedToken);
+          }
+
+          // Analyze token and execute trade if safe
+          const analysis = await this.tokenAnalyzer.analyzeToken(savedToken);
+          if (analysis.isSecure) {
+            console.log('Token analysis shows token is secure, executing trade');
+            const txHash = await this.tradeExecutor.executePurchase(savedToken.address, 0.1);
+            console.log('Trade executed successfully:', txHash);
+
+            // Save the trade to database
+            await supabaseService.addTrade({
+              token_address: savedToken.address,
+              amount: 0.1,
+              price: null,
+              status: 'completed',
+              transaction_hash: txHash,
+            });
+          } else {
+            console.log('Token analysis shows token is not secure:', analysis.details);
+          }
         }
-
-        // Analyze token and execute trade if safe
-        const analysis = await this.tokenAnalyzer.analyzeToken(savedToken);
-        if (analysis.isSecure) {
-          console.log('Token analysis shows token is secure, executing trade');
-          const txHash = await this.tradeExecutor.executePurchase(savedToken.address, 0.1);
-          console.log('Trade executed successfully:', txHash);
-
-          // Save the trade to database
-          await supabaseService.addTrade({
-            token_address: savedToken.address,
-            amount: 0.1,
-            price: null,
-            status: 'completed',
-            transaction_hash: txHash,
-          });
-        } else {
-          console.log('Token analysis shows token is not secure:', analysis.details);
-        }
+      } catch (error) {
+        console.error('Error saving token or executing trade:', error);
       }
 
       this.lastCheckTime = now;
