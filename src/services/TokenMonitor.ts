@@ -6,6 +6,7 @@ import { TokenAnalyzer } from './TokenAnalyzer';
 import { supabaseService } from './SupabaseService';
 import { PublicKey } from '@solana/web3.js';
 import { sleep } from 'lodash';
+import { Buffer } from 'buffer';
 
 export class TokenMonitor {
   private static instance: TokenMonitor;
@@ -82,9 +83,12 @@ export class TokenMonitor {
       const now = Date.now();
       console.log('Checking new tokens, last check:', new Date(this.lastCheckTime).toISOString());
 
-      // For testing purposes, create a mock new token with valid Solana address format
+      // Create a mock token with proper Buffer usage for Solana address
+      const mockTokenBytes = Buffer.from("MockToken123456789", "utf8");
+      const mockTokenPubkey = new PublicKey(mockTokenBytes);
+      
       const mockToken: Omit<Token, 'id'> = {
-        address: new PublicKey(Buffer.from("TestToken123456789012", "utf8")).toString(),
+        address: mockTokenPubkey.toString(),
         name: "Test Token " + new Date().toLocaleTimeString(),
         symbol: "TEST" + Math.floor(Math.random() * 1000),
         is_active: true,
@@ -106,7 +110,7 @@ export class TokenMonitor {
             this.onNewToken(savedToken);
           }
 
-          await sleep(1000); // Add delay between operations to respect rate limits
+          await sleep(1000);
 
           const analysis = await this.tokenAnalyzer.analyzeToken(savedToken);
           if (analysis.isSecure) {
