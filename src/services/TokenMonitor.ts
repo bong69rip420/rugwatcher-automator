@@ -6,7 +6,6 @@ import { TokenAnalyzer } from './TokenAnalyzer';
 import { supabaseService } from './SupabaseService';
 import { PublicKey } from '@solana/web3.js';
 import { sleep } from 'lodash';
-import { Buffer } from 'buffer';
 
 export class TokenMonitor {
   private static instance: TokenMonitor;
@@ -17,7 +16,7 @@ export class TokenMonitor {
   private tokenAnalyzer: TokenAnalyzer | null = null;
   private tradeExecutor: SolanaTradeExecutor | null = null;
   private lastCheckTime: number = 0;
-  private readonly CHECK_INTERVAL = 3 * 60 * 1000; // 3 minutes
+  private readonly CHECK_INTERVAL = 10000; // 10 seconds for testnet
 
   private constructor() {}
 
@@ -39,7 +38,10 @@ export class TokenMonitor {
       const provider = await blockchainService.getProvider();
       console.log('Starting token monitoring with provider:', provider);
       
-      this.connection = new Connection(provider.rpcUrl);
+      this.connection = new Connection(provider.rpcUrl, {
+        commitment: 'confirmed',
+        confirmTransactionInitialTimeout: 60000
+      });
       console.log('Connected to Solana network:', provider.network);
 
       if (this.connection) {
@@ -48,10 +50,10 @@ export class TokenMonitor {
         await this.tradeExecutor.initialize();
       }
 
+      // For testnet, we'll use the Token Program ID
       const tokenProgramId = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA';
       console.log('Monitoring token program:', tokenProgramId);
 
-      // Start immediate check and set interval
       await this.checkNewTokens();
       this.intervalId = setInterval(() => {
         this.checkNewTokens();
@@ -83,12 +85,9 @@ export class TokenMonitor {
       const now = Date.now();
       console.log('Checking new tokens, last check:', new Date(this.lastCheckTime).toISOString());
 
-      // Create a mock token with proper Buffer usage for Solana address
-      const mockTokenBytes = Buffer.from("MockToken123456789", "utf8");
-      const mockTokenPubkey = new PublicKey(mockTokenBytes);
-      
+      // For testnet, we'll use a test token
       const mockToken: Omit<Token, 'id'> = {
-        address: mockTokenPubkey.toString(),
+        address: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263', // Testnet USDC address
         name: "Test Token " + new Date().toLocaleTimeString(),
         symbol: "TEST" + Math.floor(Math.random() * 1000),
         is_active: true,
@@ -110,13 +109,13 @@ export class TokenMonitor {
             this.onNewToken(savedToken);
           }
 
-          await sleep(1000);
+          await sleep(2000); // Longer delay for testnet
 
           const analysis = await this.tokenAnalyzer.analyzeToken(savedToken);
           if (analysis.isSecure) {
-            console.log('Token analysis shows token is secure, executing trade');
+            console.log('Token analysis shows token is secure, executing test trade');
             const txHash = await this.tradeExecutor.executePurchase(savedToken.address, 0.1);
-            console.log('Trade executed successfully:', txHash);
+            console.log('Test trade simulated:', txHash);
 
             await supabaseService.addTrade({
               token_address: savedToken.address,
@@ -125,8 +124,6 @@ export class TokenMonitor {
               status: 'completed',
               transaction_hash: txHash,
             });
-          } else {
-            console.log('Token analysis shows token is not secure:', analysis.details);
           }
         }
       } catch (error) {
