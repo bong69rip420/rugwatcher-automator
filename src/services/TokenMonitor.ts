@@ -1,10 +1,11 @@
-
 import { blockchainService } from './BlockchainService';
 import { Connection } from '@solana/web3.js';
 import { Token } from '@/types/token';
 import { SolanaTradeExecutor } from './SolanaTradeExecutor';
 import { TokenAnalyzer } from './TokenAnalyzer';
 import { supabaseService } from './SupabaseService';
+import { PublicKey } from '@solana/web3.js';
+import { sleep } from 'lodash';
 
 export class TokenMonitor {
   private static instance: TokenMonitor;
@@ -81,9 +82,9 @@ export class TokenMonitor {
       const now = Date.now();
       console.log('Checking new tokens, last check:', new Date(this.lastCheckTime).toISOString());
 
-      // For testing purposes, create a mock new token
-      const mockNewToken: Omit<Token, 'id'> = {
-        address: "0x" + Math.random().toString(16).slice(2, 42),
+      // For testing purposes, create a mock new token with valid Solana address format
+      const mockToken: Omit<Token, 'id'> = {
+        address: new PublicKey(Buffer.from("TestToken123456789012", "utf8")).toString(),
         name: "Test Token " + new Date().toLocaleTimeString(),
         symbol: "TEST" + Math.floor(Math.random() * 1000),
         is_active: true,
@@ -91,11 +92,10 @@ export class TokenMonitor {
       };
 
       try {
-        // Save token to database
         const savedToken = await supabaseService.addToken({
-          address: mockNewToken.address,
-          name: mockNewToken.name,
-          symbol: mockNewToken.symbol,
+          address: mockToken.address,
+          name: mockToken.name,
+          symbol: mockToken.symbol,
         });
 
         if (savedToken) {
@@ -106,14 +106,14 @@ export class TokenMonitor {
             this.onNewToken(savedToken);
           }
 
-          // Analyze token and execute trade if safe
+          await sleep(1000); // Add delay between operations to respect rate limits
+
           const analysis = await this.tokenAnalyzer.analyzeToken(savedToken);
           if (analysis.isSecure) {
             console.log('Token analysis shows token is secure, executing trade');
             const txHash = await this.tradeExecutor.executePurchase(savedToken.address, 0.1);
             console.log('Trade executed successfully:', txHash);
 
-            // Save the trade to database
             await supabaseService.addTrade({
               token_address: savedToken.address,
               amount: 0.1,

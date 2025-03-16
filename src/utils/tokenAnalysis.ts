@@ -6,50 +6,71 @@ export interface TokenHolder {
   amount: number;
 }
 
-// Rate limiting utility
+// Improved rate limiting utility with exponential backoff
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-export async function getTokenHolders(connection: Connection, tokenAddress: string): Promise<TokenHolder[]> {
-  const MAX_RETRIES = 3;
-  const RETRY_DELAY = 2000; // 2 seconds between retries
-
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+async function retryWithBackoff<T>(
+  operation: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelay: number = 1000
+): Promise<T> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       if (attempt > 0) {
-        console.log(`Retry attempt ${attempt + 1} for getTokenHolders...`);
-        await sleep(RETRY_DELAY);
+        const delay = baseDelay * Math.pow(2, attempt - 1);
+        console.log(`Waiting ${delay}ms before retry ${attempt + 1}...`);
+        await sleep(delay);
       }
-
-      const tokenProgramId = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
-      const accounts = await connection.getProgramAccounts(tokenProgramId, {
-        filters: [
-          {
-            dataSize: 165,
-          },
-          {
-            memcmp: {
-              offset: 0,
-              bytes: tokenAddress,
-            },
-          },
-        ],
-        commitment: 'confirmed',
-      });
-
-      return accounts.map(account => ({
-        address: account.pubkey.toString(),
-        amount: Number(account.account.data.readBigInt64LE(64)),
-      }));
-    } catch (error) {
-      console.error(`Attempt ${attempt + 1} failed:`, error);
-      if (attempt === MAX_RETRIES - 1) {
-        console.error('Max retries reached for getTokenHolders');
-        return [];
+      return await operation();
+    } catch (error: any) {
+      if (error?.message?.includes('429') || error?.error?.code === 429) {
+        console.log(`Rate limited on attempt ${attempt + 1}, will retry...`);
+        if (attempt === maxRetries - 1) throw error;
+        continue;
       }
+      throw error;
     }
   }
+  throw new Error('Max retries reached');
+}
 
-  return [];
+function isValidSolanaAddress(address: string): boolean {
+  try {
+    new PublicKey(address);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function getTokenHolders(connection: Connection, tokenAddress: string): Promise<TokenHolder[]> {
+  if (!isValidSolanaAddress(tokenAddress)) {
+    console.error('Invalid token address format:', tokenAddress);
+    return [];
+  }
+
+  return retryWithBackoff(async () => {
+    const tokenProgramId = new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+    const accounts = await connection.getProgramAccounts(tokenProgramId, {
+      filters: [
+        {
+          dataSize: 165,
+        },
+        {
+          memcmp: {
+            offset: 0,
+            bytes: tokenAddress,
+          },
+        },
+      ],
+      commitment: 'confirmed',
+    });
+
+    return accounts.map(account => ({
+      address: account.pubkey.toString(),
+      amount: Number(account.account.data.readBigInt64LE(64)),
+    }));
+  });
 }
 
 export function analyzeHolderDistribution(holders: TokenHolder[]): {
@@ -75,7 +96,18 @@ export function analyzeHolderDistribution(holders: TokenHolder[]): {
 }
 
 export async function analyzeTokenContract(connection: Connection, tokenAddress: string) {
-  try {
+  if (!isValidSolanaAddress(tokenAddress)) {
+    console.error('Invalid token address format:', tokenAddress);
+    return {
+      hasUnlimitedMint: true,
+      hasPausableTrading: true,
+      hasBlacklist: true,
+      hasOwnershipTransfer: true,
+      riskLevel: 'HIGH' as const
+    };
+  }
+
+  return retryWithBackoff(async () => {
     const programAccount = await connection.getAccountInfo(new PublicKey(tokenAddress));
     if (!programAccount?.data) {
       throw new Error('Could not fetch program data');
@@ -122,20 +154,16 @@ export async function analyzeTokenContract(connection: Connection, tokenAddress:
       hasOwnershipTransfer,
       riskLevel: 'HIGH' as const // Always return HIGH as these are all risky tokens
     };
-  } catch (error) {
-    console.error('Error analyzing contract:', error);
-    return {
-      hasUnlimitedMint: true,
-      hasPausableTrading: true,
-      hasBlacklist: true,
-      hasOwnershipTransfer: true,
-      riskLevel: 'HIGH' as const
-    };
-  }
+  });
 }
 
 export async function get24hVolume(connection: Connection, tokenAddress: string): Promise<number> {
-  try {
+  if (!isValidSolanaAddress(tokenAddress)) {
+    console.error('Invalid token address format:', tokenAddress);
+    return 0;
+  }
+
+  return retryWithBackoff(async () => {
     const signature = await connection.getSignaturesForAddress(
       new PublicKey(tokenAddress),
       { limit: 1000 }
@@ -170,10 +198,7 @@ export async function get24hVolume(connection: Connection, tokenAddress: string)
     }
 
     return volume;
-  } catch (error) {
-    console.error('Error calculating 24h volume:', error);
-    return 0;
-  }
+  });
 }
 
 export async function storeTokenAnalysis(tokenAddress: string, analysis: {
