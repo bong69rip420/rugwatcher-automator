@@ -71,37 +71,39 @@ export class JupiterTradeService {
         throw new Error('Private key must be a non-empty string');
       }
 
-      // Clean up the private key string and handle different formats
+      // Clean up the private key string
       privateKeyString = privateKeyString.trim();
-      
-      // Try to decode the private key
+      console.log('Processing private key...');
+
+      // Try to decode from base58
       let secretKey: Uint8Array;
       try {
-        // First try base58 decoding
         secretKey = bs58.decode(privateKeyString);
-        console.log('Successfully decoded base58 private key, length:', secretKey.length);
+        console.log(`Decoded private key length: ${secretKey.length} bytes`);
+        
+        if (secretKey.length !== 64) {
+          throw new Error(`Invalid key length: ${secretKey.length}. Expected 64 bytes.`);
+        }
       } catch (error) {
-        console.error('Failed to decode private key as base58:', error);
-        throw new Error('Invalid private key format. Must be a valid Base58 string.');
+        console.error('Failed to decode base58 private key:', error);
+        throw new Error('Invalid private key format. Must be a valid Base58 Solana private key.');
       }
 
-      // Validate the key length
-      if (secretKey.length !== 64) {
-        throw new Error(`Invalid private key length: ${secretKey.length}. Expected 64 bytes.`);
-      }
-
-      // Create and validate the keypair
+      // Create the keypair
       try {
         const newKeypair = Keypair.fromSecretKey(secretKey);
-        console.log('Successfully created Solana keypair!');
         const publicKey = newKeypair.publicKey.toString();
-        console.log('Public key:', publicKey);
+        console.log('Successfully created Solana keypair with public key:', publicKey);
         
         this.tradingWallet = newKeypair;
         return publicKey;
       } catch (error) {
-        console.error('Error creating keypair:', error);
-        throw new Error('Invalid private key. Could not create Solana keypair.');
+        console.error('Error creating Solana keypair:', error);
+        if (error instanceof Error) {
+          throw new Error(`Failed to create Solana keypair: ${error.message}`);
+        } else {
+          throw new Error('Failed to create Solana keypair from private key');
+        }
       }
     } catch (error) {
       console.error('Error in setTradingWallet:', error);
@@ -117,6 +119,7 @@ export class JupiterTradeService {
     try {
       await this.waitForRequestWindow();
       const balance = await this.connection.getBalance(this.tradingWallet.publicKey);
+      console.log('Retrieved wallet balance:', balance / 1e9, 'SOL');
       return balance / 1e9; // Convert lamports to SOL
     } catch (error) {
       console.error('Error fetching wallet balance:', error);

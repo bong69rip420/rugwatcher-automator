@@ -15,7 +15,7 @@ export class BlockchainService {
 
   async getProvider() {
     try {
-      const { data } = await supabase.functions.invoke('get-blockchain-provider');
+      // Always return testnet configuration
       return {
         rpcUrl: 'https://api.testnet.solana.com',
         network: 'testnet',
