@@ -14,12 +14,17 @@ export class BlockchainService {
   }
 
   async getProvider() {
-    const { data } = await supabase.functions.invoke('get-blockchain-provider');
-    return {
-      ...data,
-      rpcUrl: 'https://api.testnet.solana.com',
-      network: 'testnet'
-    };
+    try {
+      const { data } = await supabase.functions.invoke('get-blockchain-provider');
+      return {
+        rpcUrl: 'https://api.testnet.solana.com',
+        network: 'testnet',
+        clusterApiUrl: 'https://api.testnet.solana.com',
+      };
+    } catch (error) {
+      console.error('Error getting blockchain provider:', error);
+      throw error;
+    }
   }
 }
 

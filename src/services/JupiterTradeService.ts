@@ -1,5 +1,5 @@
 
-import { Connection, PublicKey, Keypair, VersionedTransaction } from '@solana/web3.js';
+import { Connection, PublicKey, Keypair } from '@solana/web3.js';
 import JSBI from 'jsbi';
 import { configurationService } from './ConfigurationService';
 import bs58 from 'bs58';
@@ -71,18 +71,21 @@ export class JupiterTradeService {
         throw new Error('Private key must be a non-empty string');
       }
 
-      // Clean up the private key string (remove whitespace, etc)
+      // Clean up the private key string and handle different formats
       privateKeyString = privateKeyString.trim();
       
-      // Validate the private key format
+      // Try to decode the private key
       let secretKey: Uint8Array;
       try {
+        // First try base58 decoding
         secretKey = bs58.decode(privateKeyString);
+        console.log('Successfully decoded base58 private key, length:', secretKey.length);
       } catch (error) {
-        console.error('Error decoding private key:', error);
+        console.error('Failed to decode private key as base58:', error);
         throw new Error('Invalid private key format. Must be a valid Base58 string.');
       }
 
+      // Validate the key length
       if (secretKey.length !== 64) {
         throw new Error(`Invalid private key length: ${secretKey.length}. Expected 64 bytes.`);
       }
@@ -126,8 +129,8 @@ export class JupiterTradeService {
       throw new Error('Trade service not initialized or wallet not set');
     }
 
-    // For testnet, we'll just simulate the transaction
-    console.log(`Simulating purchase of ${amount} tokens at address ${tokenAddress}`);
+    // For testnet simulation
+    console.log(`Simulating purchase of ${amount} tokens at address ${tokenAddress} on testnet`);
     return `test-transaction-${Date.now()}`;
   }
 }
